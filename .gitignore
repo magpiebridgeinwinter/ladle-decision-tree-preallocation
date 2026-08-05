@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.venv/
+__pycache__/
+*.py[cod]
+
+# 公司生产数据和可追溯的配包明细仅保留在本机。
+data/*.xlsx
+outputs/*.xlsx
+outputs/*.csv
+outputs/*.json
+outputs/*.ndjson
