@@ -1,1 +1,4 @@
 openpyxl>=3.1,<4
+
+# Optional: for LLM ReAct integration (built-in urllib used by default)
+# openai>=1.0  # if using OpenAI-compatible client library
