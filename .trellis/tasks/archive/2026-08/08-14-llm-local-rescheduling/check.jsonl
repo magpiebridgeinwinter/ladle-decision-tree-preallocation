@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/08-14-llm-local-rescheduling/research/codebase-inventory.md", "reason": "Review must verify the documented gaps are closed without regressing decision-tree compatibility."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review shared time, event, response, and reporting contracts across module boundaries."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review that lifecycle, metrics, and validation logic each have one authoritative owner."}
