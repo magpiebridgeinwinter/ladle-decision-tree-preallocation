@@ -133,7 +133,7 @@ class TestDisturbanceInjector:
         scenario = random_disturbance(heats, ladles, cranes, assignments, disturbance_probability=1.0, seed=42)
         assert scenario is not None
         assert scenario.num_affected > 0
-        assert scenario.spec.kind in ("crane_offline", "ladle_unavailable")
+        assert scenario.spec.kind in ("crane_offline", "ladle_unavailable", "facility_unavailable", "schedule_deviation")
 
     def test_random_disturbance_no_affect_when_no_assignments(self):
         heats = [{"heat_id": "H1", "required_grade": "5"}]
@@ -233,14 +233,29 @@ class TestTieredResponseController:
 class TestReActRescheduler:
 
     def test_builds_prompt_correctly(self):
-        agent = ReActRescheduler(api_key="sk-test")
         heats = [{"heat_id": "H1", "required_grade": "5", "window_start": 0.0, "window_end": 120.0, "priority": 1}]
         ladles = [{"ladle_id": "L1", "grade": "5", "position_m": 1000.0, "weight_tonnes": 80.0, "age_seconds": 100.0}]
         cranes = [{"crane_id": "C1", "position_m": 500.0, "current_load_tonnes": 0.0, "max_load_tonnes": 300.0,
                     "speed_mps": 2000.0, "safe_distance_m": 10000.0, "limit_0_m": 0.0, "limit_1_m": 48000.0}]
-        # We can't call the API, but we can check the method signature
+        calls = []
+
+        def fake_call(messages, **_kwargs):
+            calls.append(messages)
+            return '{"assignments": [{"heat_id": "H1", "ladle_id": "L1", "crane_id": "C1"}]}'
+
+        agent = ReActRescheduler(api_key="sk-test", llm_call=fake_call)
         result = agent.reschedule(heats, ladles, cranes)
-        assert isinstance(result.success, bool)
+        assert result.success is True
+        assert len(calls) == 1
+        assert "当前需要重新分配的炉次" in calls[0][1]["content"]
+
+    def test_budget_exhaustion_does_not_call_llm(self):
+        calls = []
+        agent = ReActRescheduler(api_key="sk-test", llm_call=lambda *_args, **_kwargs: calls.append(True))
+        result = agent.reschedule([{"heat_id": "H1"}], [], [], remaining_budget_seconds=0)
+        assert result.success is False
+        assert "预算耗尽" in result.reason
+        assert calls == []
 
     def test_no_api_key_returns_failure(self):
         agent = ReActRescheduler(api_key="")

@@ -76,6 +76,7 @@ def _call_llm(
     api_base: str,
     api_key: str,
     model: str,
+    timeout_seconds: float = 120.0,
     temperature: float = 0.3,
     max_tokens: int = 4096,
 ) -> str:
@@ -96,7 +97,7 @@ def _call_llm(
     req.add_header("Authorization", f"Bearer {api_key}")
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=max(0.001, timeout_seconds)) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"]
     except urllib.error.HTTPError as e:
@@ -146,6 +147,13 @@ def _validate_proposal(
     crane_loads: dict[str, float] = {str(c["crane_id"]): float(c.get("current_load_tonnes", 0) or 0) for c in cranes}
     used_ladles: set[str] = set()
 
+    returned_heat_ids = [str(p.get("heat_id", "")) for p in proposals]
+    expected_heat_ids = set(heat_map)
+    if len(returned_heat_ids) != len(set(returned_heat_ids)):
+        violations["_proposal"] = ["duplicate_heat"]
+    missing = expected_heat_ids - set(returned_heat_ids)
+    if missing:
+        violations["_proposal"] = violations.get("_proposal", []) + ["missing_heat"]
     for p in proposals:
         heat_id = str(p.get("heat_id", "unknown"))
         ladle_id = str(p.get("ladle_id", ""))
@@ -211,6 +219,8 @@ class ReActRescheduler:
         max_rounds: int = 5,
         temperature: float = 0.3,
         verbose: bool = False,
+        llm_call: Any = _call_llm,
+        clock: Any = time.perf_counter,
     ):
         self.api_base = api_base
         self.api_key = api_key or ""
@@ -218,12 +228,17 @@ class ReActRescheduler:
         self.max_rounds = max_rounds
         self.temperature = temperature
         self.verbose = verbose
+        self._llm_call = llm_call
+        self._clock = clock
 
     def reschedule(
         self,
         heats: list[dict[str, Any]],
         ladles: list[dict[str, Any]],
         cranes: list[dict[str, Any]],
+        remaining_budget_seconds: float | None = None,
+        failure_context: dict[str, Any] | None = None,
+        rag_context: str | None = None,
     ) -> ReActResult:
         """Execute ReAct loop to reschedule affected heats.
 
@@ -235,7 +250,7 @@ class ReActRescheduler:
         Returns:
             ReActResult with final assignments and execution trace.
         """
-        t_start = time.perf_counter()
+        t_start = self._clock()
         traces: list[ReActTrace] = []
 
         # Check preconditions
@@ -258,30 +273,37 @@ class ReActRescheduler:
             {"role": "system", "content": RESCHEDULING_SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": build_problem_description(heats, ladles, cranes),
+                "content": build_problem_description(heats, ladles, cranes, failure_context, rag_context),
             },
         ]
 
         for round_num in range(1, self.max_rounds + 1):
-            t0 = time.perf_counter()
+            elapsed_total = self._clock() - t_start
+            budget_left = None if remaining_budget_seconds is None else remaining_budget_seconds - elapsed_total
+            if budget_left is not None and budget_left <= 0:
+                return ReActResult(False, [], traces, elapsed_total, "LLM 时间预算耗尽")
+            t0 = self._clock()
             try:
-                response = _call_llm(
+                response = self._llm_call(
                     messages,
                     api_base=self.api_base,
                     api_key=self.api_key,
                     model=self.model,
                     temperature=self.temperature,
+                    timeout_seconds=budget_left if budget_left is not None else 120.0,
                 )
             except Exception as exc:
                 return ReActResult(
                     success=False,
                     assignments=[],
                     traces=traces,
-                    total_elapsed=time.perf_counter() - t_start,
+                    total_elapsed=self._clock() - t_start,
                     reason=f"LLM 调用失败 (round {round_num}): {exc}",
                 )
 
-            elapsed = time.perf_counter() - t0
+            elapsed = self._clock() - t0
+            if remaining_budget_seconds is not None and self._clock() - t_start > remaining_budget_seconds:
+                return ReActResult(False, [], traces, self._clock() - t_start, "LLM 调用超出时间预算")
 
             # Parse proposal
             parsed = _parse_json_from_response(response)
@@ -316,7 +338,7 @@ class ReActRescheduler:
                     success=True,
                     assignments=_build_final_assignments(heats, proposals),
                     traces=traces,
-                    total_elapsed=time.perf_counter() - t_start,
+                    total_elapsed=self._clock() - t_start,
                     reason=f"ReAct 第 {round_num} 轮通过校验",
                 )
 
@@ -330,7 +352,7 @@ class ReActRescheduler:
             success=False,
             assignments=_build_final_assignments(heats, []),
             traces=traces,
-            total_elapsed=time.perf_counter() - t_start,
+            total_elapsed=self._clock() - t_start,
             reason=f"ReAct 超过最大轮次 {self.max_rounds}，未通过校验",
         )
 

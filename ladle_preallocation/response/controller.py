@@ -10,6 +10,7 @@ Implements the disturbance response flow from the report:
 from __future__ import annotations
 
 import time
+import inspect
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
@@ -17,6 +18,7 @@ from typing import Any, Callable
 from ladle_preallocation.decision_tree.allocator import allocate as dt_allocate
 from ladle_preallocation.decision_tree.validation import validate_output
 from ladle_preallocation.disturbance.injector import DisturbedScenario
+from ladle_preallocation.evaluation.metrics import evaluate_path
 
 
 class ResponsePath(str, Enum):
@@ -40,6 +42,11 @@ class ResponseResult:
     elapsed_seconds: float
     reason: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
+    remaining_budget_seconds: float | None = None
+    human_review_required: bool = False
+    failure_reasons: list[str] = field(default_factory=list)
+    validation_feedback: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
     @property
     def num_assigned(self) -> int:
@@ -99,6 +106,10 @@ class ThreeWayComparison:
             "llm_saved_over_frozen": self.llm_delta_from_frozen,
             "llm_path": self.llm_react.path.value if self.llm_react else None,
             "llm_elapsed_s": round(self.llm_react.elapsed_seconds, 4) if self.llm_react else None,
+            "event": self.frozen.extra.get("event", {}),
+            "frozen_metrics": self.frozen.metrics,
+            "decision_tree_metrics": self.decision_tree.metrics,
+            "llm_metrics": self.llm_react.metrics if self.llm_react else None,
         }
 
 
@@ -114,7 +125,7 @@ class TieredResponseController:
 
     EMERGENCY_THRESHOLD = 90.0  # seconds
 
-    def __init__(self, llm_rescheduler: Callable | None = None):
+    def __init__(self, llm_rescheduler: Callable | None = None, clock: Callable[[], float] = time.perf_counter):
         """Initialize with optional LLM rescheduler function.
 
         Args:
@@ -122,6 +133,7 @@ class TieredResponseController:
                 returns (success: bool, assignments: list[dict]).
         """
         self._llm = llm_rescheduler
+        self._clock = clock
 
     def _run_decision_tree(
         self,
@@ -131,12 +143,12 @@ class TieredResponseController:
         path_label: str,
     ) -> ResponseResult:
         """Run decision tree allocation and return result."""
-        t0 = time.perf_counter()
+        t0 = self._clock()
         try:
             raw = dt_allocate(heats, ladles, cranes)
             validated = validate_output(heats, ladles, cranes, raw)
         except Exception as exc:
-            elapsed = time.perf_counter() - t0
+            elapsed = self._clock() - t0
             return ResponseResult(
                 path=ResponsePath.DECISION_TREE_FAILURE,
                 assignments=[],
@@ -144,7 +156,7 @@ class TieredResponseController:
                 elapsed_seconds=elapsed,
                 reason=f"决策树异常: {exc}",
             )
-        elapsed = time.perf_counter() - t0
+        elapsed = self._clock() - t0
         success = all(a.get("action") == "assign" for a in validated)
         return ResponseResult(
             path=ResponsePath.DECISION_TREE_SUCCESS if success else ResponsePath.DECISION_TREE_FAILURE,
@@ -160,6 +172,8 @@ class TieredResponseController:
         heats: list[dict[str, Any]],
         ladles: list[dict[str, Any]],
         cranes: list[dict[str, Any]],
+        remaining_budget_seconds: float,
+        failure_context: dict[str, Any],
     ) -> ResponseResult:
         """Run LLM ReAct rescheduling."""
         if self._llm is None:
@@ -170,11 +184,21 @@ class TieredResponseController:
                 elapsed_seconds=0.0,
                 reason="LLM 重调度器未配置",
             )
-        t0 = time.perf_counter()
+        if remaining_budget_seconds <= 0:
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=0.0,
+                reason="LLM 时间预算耗尽",
+                remaining_budget_seconds=remaining_budget_seconds,
+                failure_reasons=["budget_exhausted"],
+            )
+        t0 = self._clock()
         try:
-            success, assignments = self._llm(heats, ladles, cranes)
+            result = self._invoke_llm(heats, ladles, cranes, remaining_budget_seconds, failure_context)
         except Exception as exc:
-            elapsed = time.perf_counter() - t0
+            elapsed = self._clock() - t0
             return ResponseResult(
                 path=ResponsePath.LLM_REACT_FAILURE,
                 assignments=[],
@@ -182,15 +206,70 @@ class TieredResponseController:
                 elapsed_seconds=elapsed,
                 reason=f"LLM ReAct 异常: {exc}",
             )
-        elapsed = time.perf_counter() - t0
+        elapsed = self._clock() - t0
+        if elapsed > remaining_budget_seconds:
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=elapsed,
+                reason="LLM 调用超出剩余时间预算",
+                remaining_budget_seconds=0.0,
+                failure_reasons=["budget_timeout"],
+            )
+        success, assignments, feedback = self._normalise_llm_result(result, heats, ladles, cranes)
         return ResponseResult(
             path=ResponsePath.LLM_REACT_SUCCESS if success else ResponsePath.LLM_REACT_FAILURE,
             assignments=assignments,
             success=success,
             elapsed_seconds=elapsed,
-            reason="LLM ReAct 重调度成功" if success else "LLM ReAct 未能解决所有冲突",
-            extra={"algorithm": "llm_react"},
+            reason="LLM ReAct 重调度成功" if success else "LLM ReAct 未能解决所有冲突或硬约束终检失败",
+            extra={"algorithm": "llm_react", "failure_context": failure_context},
+            remaining_budget_seconds=max(0.0, remaining_budget_seconds - elapsed),
+            failure_reasons=[] if success else ["invalid_or_incomplete_llm_proposal"],
+            validation_feedback=feedback,
         )
+
+    def _invoke_llm(
+        self,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+        budget: float,
+        failure_context: dict[str, Any],
+    ) -> Any:
+        target = self._llm.reschedule if hasattr(self._llm, "reschedule") else self._llm
+        parameters = inspect.signature(target).parameters
+        kwargs: dict[str, Any] = {}
+        if "remaining_budget_seconds" in parameters:
+            kwargs["remaining_budget_seconds"] = budget
+        if "failure_context" in parameters:
+            kwargs["failure_context"] = failure_context
+        return target(heats, ladles, cranes, **kwargs)
+
+    @staticmethod
+    def _normalise_llm_result(
+        result: Any,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+    ) -> tuple[bool, list[dict[str, Any]], dict[str, Any]]:
+        if hasattr(result, "success"):
+            declared_success, assignments = bool(result.success), list(result.assignments)
+            feedback = {"agent_reason": getattr(result, "reason", ""), "trace": result.as_dict() if hasattr(result, "as_dict") else {}}
+        else:
+            declared_success, assignments = result
+            feedback = {}
+        heat_ids = [str(heat["heat_id"]) for heat in heats]
+        returned_ids = [str(row.get("heat_id", "")) for row in assignments]
+        complete = len(returned_ids) == len(heat_ids) and set(returned_ids) == set(heat_ids) and len(set(returned_ids)) == len(returned_ids)
+        validated = validate_output(heats, ladles, cranes, assignments)
+        valid = complete and all(row.get("action") == "assign" for row in validated)
+        for row in validated:
+            row["algorithm"] = "llm_react"
+        feedback["complete"] = complete
+        feedback["validated_actions"] = {str(row["heat_id"]): row["action"] for row in validated}
+        return bool(declared_success) and valid, validated, feedback
 
     def _frozen_result(
         self,
@@ -216,6 +295,7 @@ class TieredResponseController:
             elapsed_seconds=0.0,
             reason="原地不动硬扛",
             extra={"algorithm": "frozen"},
+            human_review_required=True,
         )
 
     def handle_disturbance(
@@ -233,17 +313,16 @@ class TieredResponseController:
 
         if not remaining_heats:
             # No heats to reallocate, keep baseline
-            return (
-                ResponseResult(
+            result = ResponseResult(
                     path=ResponsePath.FROZEN,
                     assignments=scenario.baseline_assignments,
                     success=True,
                     elapsed_seconds=0.0,
                     reason="无受波及炉次",
                     extra={"algorithm": "frozen"},
-                ),
-                None,
-            )
+                )
+            self._attach_metrics(result, scenario)
+            return result, None
 
         # Step 1: Try decision tree rerank
         dt_result = self._run_decision_tree(
@@ -261,15 +340,27 @@ class TieredResponseController:
                 list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
             )
             dt_result.assignments = merged
+            self._attach_metrics(dt_result, scenario)
             return dt_result, None
 
-        # Step 2: Decision tree failed → check emergency threshold
-        if scenario.is_emergency:
+        budget = scenario.remaining_budget_seconds
+        # Older callers may not provide an event coordinate; they retain the
+        # previous non-emergency fallback semantics.
+        if budget is not None:
+            budget = max(0.0, budget - dt_result.elapsed_seconds)
+        dt_result.remaining_budget_seconds = budget
+        dt_result.failure_reasons = [dt_result.reason]
+
+        # Step 2: Decision tree failed → exhausted budget means no LLM call.
+        if scenario.is_emergency or (budget is not None and budget <= 0.0):
             frozen = self._frozen_result(
                 scenario.baseline_assignments,
                 scenario.affected_heat_ids,
             )
-            frozen.reason = "紧急场景（≤90s），决策树失败，Frozen + 呼叫人工"
+            frozen.reason = "时间预算耗尽，决策树失败，Frozen + 呼叫人工"
+            frozen.remaining_budget_seconds = budget
+            frozen.failure_reasons = [dt_result.reason, "budget_exhausted"]
+            self._attach_metrics(frozen, scenario)
             return frozen, None
 
         # Step 3: Non-emergency → LLM ReAct
@@ -277,6 +368,8 @@ class TieredResponseController:
             remaining_heats,
             scenario.remaining_ladles,
             scenario.remaining_cranes,
+            budget if budget is not None else float("inf"),
+            {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "event": scenario.audit.get("event", {})},
         )
 
         if llm_result.success:
@@ -286,6 +379,7 @@ class TieredResponseController:
                 list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
             )
             llm_result.assignments = merged
+            self._attach_metrics(llm_result, scenario)
             return llm_result, llm_result
 
         # Step 4: LLM also failed → Frozen + alarm
@@ -294,12 +388,16 @@ class TieredResponseController:
             scenario.affected_heat_ids,
         )
         frozen.reason = "决策树+LLM 均失败，Frozen + 告警等人工"
+        frozen.remaining_budget_seconds = llm_result.remaining_budget_seconds
+        frozen.failure_reasons = [dt_result.reason, llm_result.reason]
+        self._attach_metrics(frozen, scenario)
         return frozen, llm_result
 
     def run_three_way(
         self,
         scenario: DisturbedScenario,
         scenario_id: str = "1",
+        force_llm_on_success: bool = False,
     ) -> ThreeWayComparison:
         """Run and compare all three paths: Frozen, DT, LLM.
 
@@ -339,11 +437,16 @@ class TieredResponseController:
 
         # LLM ReAct (only if DT failed and we have LLM)
         llm = None
-        if not dt_result.success and self._llm is not None and remaining_heats:
+        budget = scenario.remaining_budget_seconds
+        if budget is not None:
+            budget = max(0.0, budget - dt_result.elapsed_seconds)
+        if self._llm is not None and remaining_heats and budget != 0.0 and (not dt_result.success or force_llm_on_success):
             llm_result = self._run_llm_react(
                 remaining_heats,
                 scenario.remaining_ladles,
                 scenario.remaining_cranes,
+                budget if budget is not None else float("inf"),
+                {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "experimental_forced": force_llm_on_success and dt_result.success},
             )
             llm_merged = _merge_assignments(
                 scenario.frozen_assignments,
@@ -353,6 +456,11 @@ class TieredResponseController:
             llm_result.assignments = llm_merged
             llm = llm_result
 
+        for result in (frozen, dt_result, llm):
+            if result is not None:
+                result.extra.setdefault("event", scenario.audit.get("event", {}))
+                self._attach_metrics(result, scenario)
+
         return ThreeWayComparison(
             scenario_id=scenario_id,
             disturbance_desc=scenario.spec.description,
@@ -361,6 +469,17 @@ class TieredResponseController:
             frozen=frozen,
             decision_tree=dt_result,
             llm_react=llm,
+        )
+
+    @staticmethod
+    def _attach_metrics(result: ResponseResult, scenario: DisturbedScenario) -> None:
+        result.metrics = evaluate_path(
+            scenario.baseline_heats,
+            scenario.baseline_assignments,
+            result.assignments,
+            scenario.affected_heat_ids,
+            result.human_review_required,
+            result.elapsed_seconds,
         )
 
 

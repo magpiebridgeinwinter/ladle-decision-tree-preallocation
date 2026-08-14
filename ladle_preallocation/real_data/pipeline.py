@@ -14,6 +14,7 @@ from ladle_preallocation.evaluation.metrics import FORMULAS, evaluate
 from ladle_preallocation.real_data.reader import parse_production_time, read_plan
 from ladle_preallocation.real_data.scenario import build_scenario_from_real_snapshots
 from ladle_preallocation.real_data.xlsx_stream import read_latest_online_cranes_stream
+from ladle_preallocation.real_data.lifecycle import LifecycleManager
 
 DEFAULT_PLAN = Path("data/PLAN(1)_预配包输入.xlsx")
 DEFAULT_CRANE = Path("data/CRANE.xlsx")
@@ -93,6 +94,8 @@ def run_pipeline(
     crane_path: Path = DEFAULT_CRANE,
     output_dir: Path = DEFAULT_OUTPUT,
     month: str | None = None,
+    sliding_window: bool = False,
+    window_minutes: float = 180.0,
 ) -> dict[str, Any]:
     """Allocate eligible heats and write the auditable JSON and summary outputs."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -108,7 +111,12 @@ def run_pipeline(
     if {str(row["crane_id"]) for row in cranes} != snapshot_ids:
         raise RuntimeError("场景行车编号与 CRANE 快照来源不一致")
 
-    assignments = validate_output(heats, ladles, cranes, allocate(heats, ladles, cranes))
+    lifecycle: LifecycleManager | None = None
+    if sliding_window:
+        lifecycle = LifecycleManager(heats)
+        assignments = _run_sliding_window(heats, ladles, cranes, lifecycle, window_minutes * 60.0)
+    else:
+        assignments = validate_output(heats, ladles, cranes, allocate(heats, ladles, cranes))
     if any(row.get("crane_id") and str(row["crane_id"]) not in snapshot_ids for row in assignments):
         raise RuntimeError("决策树结果包含无法追溯的行车编号")
 
@@ -186,6 +194,12 @@ def run_pipeline(
         "real_crane_ids": sorted(snapshot_ids),
         "crane_snapshots": snapshots,
         "scenario": {"heats": len(heats), "ladles": len(ladles), "cranes": len(cranes)},
+        # Keep the normalized inputs with the audit so the demo can replay a
+        # disturbance without reconstructing a different scenario from PLAN.
+        "scheduling_inputs": {"heats": heats, "ladles": ladles, "cranes": cranes},
+        "execution_mode": "sliding_window" if sliding_window else "full_replay",
+        "sliding_window_seconds": window_minutes * 60.0 if sliding_window else None,
+        "lifecycle": lifecycle.records() if lifecycle else None,
         "assumptions": {
             "speed": "CRANE 缺失时统一使用 2 m/s",
             "max_load": "CRANE 缺失时统一使用 300 t",
@@ -225,7 +239,31 @@ def run_pipeline(
         "heats": len(assignments),
         "metrics": metrics,
         "real_crane_ids": sorted(snapshot_ids),
+        "execution_mode": "sliding_window" if sliding_window else "full_replay",
     }
+
+
+def _run_sliding_window(
+    heats: list[dict[str, Any]],
+    ladles: list[dict[str, Any]],
+    cranes: list[dict[str, Any]],
+    lifecycle: LifecycleManager,
+    window_seconds: float,
+) -> list[dict[str, Any]]:
+    """Preallocate each heat when it enters the explicit rolling window."""
+    by_id = {str(heat["heat_id"]): heat for heat in heats}
+    all_assignments: dict[str, dict[str, Any]] = {}
+    entry_times = sorted(float(heat["pour_at"]) - window_seconds for heat in heats if heat.get("pour_at") is not None)
+    for now in entry_times:
+        eligible = lifecycle.eligible_heat_ids(now, window_seconds)
+        if not eligible:
+            continue
+        selected = [by_id[heat_id] for heat_id in eligible]
+        validated = validate_output(selected, ladles, cranes, allocate(selected, ladles, cranes))
+        lifecycle.apply_assignments(validated, now, "entered_preallocation_window")
+        all_assignments.update({str(row["heat_id"]): row for row in validated})
+    lifecycle.advance(max(float(heat.get("pour_at", 0.0)) for heat in heats) if heats else 0.0)
+    return [all_assignments.get(str(heat["heat_id"]), {"heat_id": str(heat["heat_id"]), "action": "unassigned"}) for heat in heats]
 
 
 def main() -> None:
@@ -234,8 +272,10 @@ def main() -> None:
     parser.add_argument("--crane-path", type=Path, default=DEFAULT_CRANE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--month", help="Evaluation month in YYYY-MM; defaults to PLAN dominant month")
+    parser.add_argument("--sliding-window", action="store_true", help="Use the 180-minute rolling lifecycle scheduler")
+    parser.add_argument("--window-minutes", type=float, default=180.0)
     args = parser.parse_args()
-    print(json.dumps(run_pipeline(args.plan_path, args.crane_path, args.output_dir, args.month), ensure_ascii=False, indent=2))
+    print(json.dumps(run_pipeline(args.plan_path, args.crane_path, args.output_dir, args.month, args.sliding_window, args.window_minutes), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

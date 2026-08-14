@@ -5,6 +5,10 @@ from ladle_preallocation.disturbance.injector import (
     DisturbedScenario,
     inject_disturbance,
     random_disturbance,
+    CRANE_OFFLINE,
+    LADLE_UNAVAILABLE,
+    FACILITY_UNAVAILABLE,
+    SCHEDULE_DEVIATION,
 )
 
 __all__ = [
@@ -12,4 +16,8 @@ __all__ = [
     "DisturbedScenario",
     "inject_disturbance",
     "random_disturbance",
+    "CRANE_OFFLINE",
+    "LADLE_UNAVAILABLE",
+    "FACILITY_UNAVAILABLE",
+    "SCHEDULE_DEVIATION",
 ]

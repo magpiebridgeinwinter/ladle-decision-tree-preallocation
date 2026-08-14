@@ -1,5 +1,7 @@
 """Prompts for the LLM ReAct rescheduling agent."""
 
+from __future__ import annotations
+
 RESCHEDULING_SYSTEM_PROMPT = """你是一个钢铁冶炼调度专家，专门处理生产扰动后的钢包重调度。
 
 ## 你的角色
@@ -45,6 +47,8 @@ def build_problem_description(
     heats: list[dict],
     ladles: list[dict],
     cranes: list[dict],
+    failure_context: dict | None = None,
+    rag_context: str | None = None,
 ) -> str:
     """Build a structured problem description for the LLM."""
 
@@ -54,6 +58,8 @@ def build_problem_description(
         return str(v)
 
     lines = ["## 当前需要重新分配的炉次\n"]
+    if failure_context:
+        lines.append(f"决策树失败信息：{failure_context}\n")
     lines.append("| 炉次ID | 所需等级 | 时间窗开始(s) | 时间窗结束(s) | 优先级 |")
     lines.append("|--------|---------|-------------|-------------|-------|")
     for h in heats:
@@ -97,6 +103,8 @@ def build_problem_description(
         f"需要为上述 {len(heats)} 个炉次分配钢包和行车。"
         "请输出完整的 assignments JSON 数组。"
     )
+    if rag_context:
+        lines.append("\n## 可选经验上下文（不替代硬约束）\n" + rag_context)
     return "\n".join(lines)
 
 

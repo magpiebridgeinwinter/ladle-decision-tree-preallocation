@@ -59,6 +59,9 @@ def _heat(row: dict[str, Any], t0: float) -> dict[str, Any]:
         "target_age_seconds": 0.0,
         "priority": _number(row.get("priority")),
         "refining_route": row.get("refining_route"),
+        # Keep the absolute coordinate alongside legacy relative scheduler fields.
+        "pour_at": end,
+        "blow_at": _timestamp(row, "ladle_arrival_at") or end,
     }
 
 

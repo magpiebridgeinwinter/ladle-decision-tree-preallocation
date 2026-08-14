@@ -21,6 +21,10 @@ from ladle_preallocation.decision_tree.validation import validate_output
 from ladle_preallocation.disturbance.injector import (
     DisturbanceSpec,
     inject_disturbance,
+    CRANE_OFFLINE,
+    LADLE_UNAVAILABLE,
+    FACILITY_UNAVAILABLE,
+    SCHEDULE_DEVIATION,
 )
 from ladle_preallocation.response.controller import (
     ThreeWayComparison,
@@ -65,7 +69,12 @@ class BatchResult:
         dt_success = sum(1 for c in self.comparisons if c.decision_tree.success)
         dt_total_saved = sum(c.dt_saved for c in self.comparisons)
 
-        llm_results = [c for c in self.comparisons if c.llm_react is not None]
+        # The two core LLM metrics describe the production fallback path, not
+        # optional experiments that force LLM after a successful tree result.
+        llm_results = [
+            c for c in self.comparisons
+            if not c.decision_tree.success and c.llm_react is not None
+        ]
         llm_success = sum(1 for c in llm_results if c.llm_react.success) if llm_results else 0
         llm_total_saved = sum(c.llm_saved for c in llm_results if c.llm_saved is not None) if llm_results else 0
         llm_total_saved_from_frozen = sum(c.llm_delta_from_frozen for c in llm_results if c.llm_delta_from_frozen is not None) if llm_results else 0
@@ -76,12 +85,21 @@ class BatchResult:
             "dt_success_rate": dt_success / n if n else 0,
             "dt_total_saved_over_frozen": dt_total_saved,
             "llm_attempted": len(llm_results),
-            "llm_success_rate": llm_success / len(llm_results) if llm_results else 0,
+            "dtree_fail_llm_success_rate": llm_success / len(llm_results) if llm_results else None,
+            "frozen_avoidance_rate": sum(1 for c in llm_results if c.llm_react and c.llm_react.success and c.llm_react.num_assigned > c.frozen.num_assigned) / len(llm_results) if llm_results else None,
+            # Retained for compatibility; N/A follows the new PRD metric.
+            "llm_success_rate": llm_success / len(llm_results) if llm_results else None,
             "llm_total_saved_over_dt": llm_total_saved,
             "llm_total_saved_over_frozen": llm_total_saved_from_frozen,
             "dt_avg_elapsed_ms": _safe_mean([c.decision_tree.elapsed_seconds * 1000 for c in self.comparisons]),
             "llm_avg_elapsed_s": _safe_mean([c.llm_react.elapsed_seconds for c in llm_results]) if llm_results else None,
         }
+        for label, selector in (("frozen", lambda c: c.frozen), ("decision_tree", lambda c: c.decision_tree), ("llm", lambda c: c.llm_react)):
+            available = [selector(c).metrics for c in self.comparisons if selector(c) is not None]
+            self.summary[f"{label}_metrics"] = {
+                key: _safe_mean([float(metrics[key]) for metrics in available]) if available else None
+                for key in ("on_time_rate", "priority_on_time", "average_delay_seconds", "max_delay_seconds", "changed_heats", "human_review_rate", "rule_violations", "decision_seconds")
+            }
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -111,13 +129,14 @@ class BatchResult:
                 "",
                 "## LLM ReAct 重调度",
                 f"- 尝试次数：{s['llm_attempted']}（决策树失败后启动）",
-                f"- 成功率：{s['llm_success_rate']:.1%}",
+                f"- 决策树失败后 LLM 成功率：{s['dtree_fail_llm_success_rate']:.1%}",
+                f"- Frozen 避免率：{s['frozen_avoidance_rate']:.1%}",
                 f"- 决策树之上救回炉次：{s['llm_total_saved_over_dt']}",
                 f"- Froze以上救回炉次：{s['llm_total_saved_over_frozen']}",
                 f"- 平均耗时：{s['llm_avg_elapsed_s']:.1f} s" if s["llm_avg_elapsed_s"] is not None else "- 平均耗时：N/A",
                 "",
                 "## 量化结论",
-                f"LLM 在决策树失败的场景中，额外救回率：{s['llm_success_rate']:.1%}，"
+                f"LLM 在决策树失败的场景中，额外救回率：{s['dtree_fail_llm_success_rate']:.1%}，"
                 f"共额外救回 {s['llm_total_saved_over_dt']} 炉次。",
             ])
         else:
@@ -168,7 +187,7 @@ class BatchRunner:
         for i in range(self.config.num_scenarios):
             scenario_seed = rng.randint(0, 2**31 - 1)
 
-            # Generate disturbance: pick a random assigned crane
+            # Generate a reproducible single-event scenario across all PRD kinds.
             assigned_cranes = list({
                 str(a.get("crane_id", ""))
                 for a in allocations
@@ -177,12 +196,20 @@ class BatchRunner:
             if not assigned_cranes:
                 continue
 
-            offline_crane = rng.choice(assigned_cranes)
-            spec = DisturbanceSpec(
-                kind="crane_offline",
-                resource_id=offline_crane,
-                description=f"行车 {offline_crane} 离线故障",
-            )
+            kind = rng.choice((CRANE_OFFLINE, LADLE_UNAVAILABLE, FACILITY_UNAVAILABLE, SCHEDULE_DEVIATION))
+            assigned_ladles = sorted({str(a["ladle_id"]) for a in allocations if a.get("ladle_id")})
+            facilities = sorted({str(h.get("facility_id") or h.get("facility") or h.get("refining_route")) for h in heats if h.get("facility_id") or h.get("facility") or h.get("refining_route")})
+            heat_ids = sorted(str(h["heat_id"]) for h in heats)
+            if kind == CRANE_OFFLINE:
+                resource_id, description, metadata = rng.choice(assigned_cranes), "行车离线故障", {}
+            elif kind == LADLE_UNAVAILABLE and assigned_ladles:
+                resource_id, description, metadata = rng.choice(assigned_ladles), "钢包不可用", {}
+            elif kind == FACILITY_UNAVAILABLE and facilities:
+                resource_id, description, metadata = rng.choice(facilities), "设施不可用", {}
+            else:
+                kind, resource_id, description, metadata = SCHEDULE_DEVIATION, rng.choice(heat_ids), "计划偏差", {"delay_seconds": 120.0}
+            pours = [float(h.get("pour_at", h.get("window_end", 0.0))) for h in heats]
+            spec = DisturbanceSpec(kind, resource_id, description, rng.uniform(min(pours), max(pours)), metadata)
 
             scenario = inject_disturbance(spec, heats, ladles, cranes, allocations)
 
@@ -192,6 +219,7 @@ class BatchRunner:
             comparison = self.controller.run_three_way(
                 scenario,
                 scenario_id=f"{self.config.scenario_prefix}_{i+1:03d}",
+                force_llm_on_success=self.config.force_llm_on_success,
             )
             comparisons.append(comparison)
 

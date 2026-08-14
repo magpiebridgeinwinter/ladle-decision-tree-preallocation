@@ -91,12 +91,13 @@ Examples:
     with open(audit_path, encoding="utf-8") as f:
         audit = json.load(f)
 
-    heats = audit["scenario"]["heats"]
-    ladles = audit["scenario"]["ladles"]
-    cranes = audit["scenario"]["cranes"]
+    scheduling_inputs = audit["scheduling_inputs"]
+    heats = scheduling_inputs["heats"]
+    ladles = scheduling_inputs["ladles"]
+    cranes = scheduling_inputs["cranes"]
     assignments = audit["assignments"]
 
-    print(f"  场景: {heats} 炉次, {ladles} 钢包, {cranes} 台行车")
+    print(f"  场景: {len(heats)} 炉次, {len(ladles)} 钢包, {len(cranes)} 台行车")
 
     # Step 2: RAG search demo
     print("\n[2/6] RAG 知识检索演示...")
