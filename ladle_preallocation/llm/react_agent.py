@@ -215,7 +215,7 @@ class ReActRescheduler:
         self,
         api_base: str = "https://api.deepseek.com",
         api_key: str | None = None,
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-flash",
         max_rounds: int = 5,
         temperature: float = 0.3,
         verbose: bool = False,

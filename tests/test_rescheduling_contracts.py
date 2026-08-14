@@ -55,6 +55,22 @@ def test_event_time_budget_blocks_llm_after_deterministic_failure():
     assert calls == []
 
 
+def test_controller_passes_optional_rag_context_to_rescheduler():
+    heats, ladles, cranes, assignments = _scenario_data()
+    captured = {}
+
+    class Rescheduler:
+        def reschedule(self, _heats, _ladles, _cranes, **kwargs):
+            captured.update(kwargs)
+            return False, []
+
+    scenario = inject_disturbance(
+        DisturbanceSpec(CRANE_OFFLINE, "C1", occurred_at=100), heats, ladles, cranes, assignments,
+    )
+    TieredResponseController(Rescheduler(), rag_context="安全规程上下文").handle_disturbance(scenario)
+    assert captured["rag_context"] == "安全规程上下文"
+
+
 def test_all_supported_disturbance_kinds_produce_auditable_scenarios():
     heats, ladles, cranes, assignments = _scenario_data()
     cases = [

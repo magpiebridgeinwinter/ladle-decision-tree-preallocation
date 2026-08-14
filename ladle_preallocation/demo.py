@@ -49,7 +49,7 @@ Examples:
     parser.add_argument("--num-scenarios", type=int, default=10)
     parser.add_argument("--llm-api-key", default="")
     parser.add_argument("--llm-api-base", default="https://api.deepseek.com")
-    parser.add_argument("--llm-model", default="deepseek-chat")
+    parser.add_argument("--llm-model", default="deepseek-v4-flash")
     parser.add_argument("--llm-max-rounds", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--skip-llm", action="store_true")
@@ -103,6 +103,7 @@ Examples:
     print("\n[2/6] RAG 知识检索演示...")
     query = "行车离线故障后如何重新调度"
     results = kb.search(query, top_k=3)
+    rag_context = kb.build_context_for_llm(query, top_k=3)
     for r in results:
         print(f"  [{r['similarity']:.2f}] [{r['source']}] {r['text'][:60]}...")
 
@@ -144,7 +145,7 @@ Examples:
                 print("  (未提供 LLM API Key，跳过 LLM ReAct)")
 
         # Run tiered response
-        controller = TieredResponseController(llm_fn)
+        controller = TieredResponseController(llm or llm_fn, rag_context=rag_context)
         primary, llm_result = controller.handle_disturbance(scenario)
 
         print(f"\n  响应路径: {primary.path.value}")

@@ -125,7 +125,12 @@ class TieredResponseController:
 
     EMERGENCY_THRESHOLD = 90.0  # seconds
 
-    def __init__(self, llm_rescheduler: Callable | None = None, clock: Callable[[], float] = time.perf_counter):
+    def __init__(
+        self,
+        llm_rescheduler: Callable | None = None,
+        clock: Callable[[], float] = time.perf_counter,
+        rag_context: str | None = None,
+    ):
         """Initialize with optional LLM rescheduler function.
 
         Args:
@@ -134,6 +139,7 @@ class TieredResponseController:
         """
         self._llm = llm_rescheduler
         self._clock = clock
+        self._rag_context = rag_context or ""
 
     def _run_decision_tree(
         self,
@@ -240,11 +246,14 @@ class TieredResponseController:
     ) -> Any:
         target = self._llm.reschedule if hasattr(self._llm, "reschedule") else self._llm
         parameters = inspect.signature(target).parameters
+        accepts_kwargs = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
         kwargs: dict[str, Any] = {}
-        if "remaining_budget_seconds" in parameters:
+        if "remaining_budget_seconds" in parameters or accepts_kwargs:
             kwargs["remaining_budget_seconds"] = budget
-        if "failure_context" in parameters:
+        if "failure_context" in parameters or accepts_kwargs:
             kwargs["failure_context"] = failure_context
+        if ("rag_context" in parameters or accepts_kwargs) and self._rag_context:
+            kwargs["rag_context"] = self._rag_context
         return target(heats, ladles, cranes, **kwargs)
 
     @staticmethod
