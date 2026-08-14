@@ -121,7 +121,7 @@ class BatchResult:
             "",
             "## 决策树重排",
             f"- 成功率：{s['dt_success_rate']:.1%}",
-            f"- Fronzen 之上救回炉次：{s['dt_total_saved_over_frozen']}",
+            f"- Frozen 之上救回炉次：{s['dt_total_saved_over_frozen']}",
             f"- 平均耗时：{s['dt_avg_elapsed_ms']:.1f} ms",
         ]
         if s["llm_attempted"] > 0:
