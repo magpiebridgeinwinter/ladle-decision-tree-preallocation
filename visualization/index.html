@@ -3,410 +3,357 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f5ee">
-  <title>钢包局部重调度 | 流程演示</title>
+  <meta name="theme-color" content="#f3f4f0">
+  <title>钢包局部重调度流程</title>
   <style>
     :root {
-      --ink: #17201d;
-      --muted: #637069;
-      --canvas: #f4f5ee;
+      --page: #f3f4f0;
       --surface: #ffffff;
-      --line: #d9dfd8;
-      --green: #17785f;
-      --green-soft: #e2f2e9;
-      --blue: #2776a9;
-      --blue-soft: #e2f0f9;
-      --amber: #b56d08;
-      --amber-soft: #fff0d3;
-      --red: #b44141;
-      --red-soft: #fae5e5;
-      --shadow: 0 16px 32px rgba(27, 40, 34, .08);
-      --radius: 8px;
+      --ink: #17201c;
+      --muted: #647169;
+      --line: #d8ded8;
+      --soft: #edf0ec;
+      --green: #176f57;
+      --green-soft: #e3f1ea;
+      --orange: #bd6d12;
+      --orange-soft: #fff0dc;
+      --blue: #276f9d;
+      --blue-soft: #e6f1f7;
+      --red: #af4141;
+      --red-soft: #f9e7e7;
     }
 
     * { box-sizing: border-box; }
-    html { background: var(--canvas); }
+    html { background: var(--page); }
     body {
       margin: 0;
+      min-width: 320px;
       color: var(--ink);
-      background: var(--canvas);
+      background: var(--page);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 14px;
       line-height: 1.45;
     }
 
-    button, input { font: inherit; }
+    button, select, input { font: inherit; }
     button { cursor: pointer; }
-    button:focus-visible, input:focus-visible { outline: 3px solid rgba(39, 118, 169, .3); outline-offset: 2px; }
-
-    .app-shell { max-width: 1500px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 44px) 44px; }
-    .topbar { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding-bottom: 25px; border-bottom: 1px solid var(--line); }
-    .eyebrow { margin: 0 0 7px; color: var(--green); font-size: 12px; font-weight: 760; letter-spacing: 0; }
-    h1 { margin: 0; font-size: clamp(26px, 3.2vw, 44px); line-height: 1.08; letter-spacing: 0; font-weight: 760; }
-    .subhead { margin: 10px 0 0; max-width: 730px; color: var(--muted); font-size: 15px; }
-    .legend { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; min-width: 265px; padding-top: 5px; color: var(--muted); font-size: 12px; }
-    .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-    .dot.blue { background: var(--blue); }.dot.amber { background: var(--amber); }.dot.red { background: var(--red); }
-
-    .notice { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 20px 0; padding: 13px 16px; color: #3d4a43; background: #e9eee8; border: 1px solid #d8e1d8; border-radius: var(--radius); }
-    .notice strong { color: var(--ink); }
-    .notice small { color: var(--muted); }
-
-    .workspace { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr) minmax(270px, 325px); gap: 18px; align-items: start; }
-    .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 19px 20px 15px; border-bottom: 1px solid var(--line); }
-    .panel-head h2 { margin: 0; font-size: 15px; line-height: 1.25; letter-spacing: 0; }
-    .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-    .panel-body { padding: 18px 20px 20px; }
-
-    .control-group + .control-group { margin-top: 21px; padding-top: 20px; border-top: 1px solid var(--line); }
-    .field-label { display: block; margin: 0 0 9px; color: var(--ink); font-size: 12px; font-weight: 750; }
-    .chip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-    .chip { min-height: 40px; padding: 8px 9px; color: #42514a; text-align: left; background: #f7f8f6; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; line-height: 1.2; }
-    .chip:hover { border-color: #9eb7aa; background: #f0f6f2; }
-    .chip.active { color: #07563f; background: var(--green-soft); border-color: #79bda5; font-weight: 720; }
-    .segmented { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-    .segment { min-height: 38px; padding: 8px 7px; color: var(--muted); background: #fff; border: 0; border-right: 1px solid var(--line); font-size: 12px; }
-    .segment:last-child { border-right: 0; }
-    .segment.active { color: #07563f; background: var(--green-soft); font-weight: 720; }
-    .segment.danger-active { color: #9b3030; background: var(--red-soft); }
-    .range-readout { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-    .range-readout strong { font-size: 18px; letter-spacing: 0; }
-    .range-readout span { color: var(--muted); font-size: 11px; text-align: right; }
-    input[type="range"] { width: 100%; accent-color: var(--green); }
-    .scale { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-size: 10px; }
-    .formula { margin-top: 11px; padding: 10px; color: #355043; background: #eff5f0; border-left: 3px solid var(--green); font-size: 11px; line-height: 1.5; }
-    .run-button { width: 100%; min-height: 45px; margin-top: 21px; color: #fff; background: var(--ink); border: 1px solid var(--ink); border-radius: 6px; font-weight: 720; }
-    .run-button:hover { background: #29332e; }
-
-    .main-stack { display: grid; gap: 18px; }
-    .timeline-panel { padding: 20px; }
-    .timeline-top { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-    .timeline-top h2 { margin: 0; font-size: 15px; }
-    .timeline-top p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-    .current-time { padding: 7px 9px; color: #07563f; background: var(--green-soft); border-radius: 5px; font-size: 12px; font-weight: 750; white-space: nowrap; }
-    .time-rail { position: relative; height: 125px; margin: 22px 5px 0; }
-    .rail-line { position: absolute; top: 55px; right: 0; left: 0; height: 4px; background: #e1e7e1; border-radius: 3px; }
-    .preallocation-band { position: absolute; top: 55px; left: 0; width: 82%; height: 4px; background: var(--green); border-radius: 3px 0 0 3px; }
-    .buffer-band { position: absolute; top: 55px; right: 0; width: 1.4%; min-width: 4px; height: 4px; background: var(--red); border-radius: 0 3px 3px 0; }
-    .marker { position: absolute; top: 20px; transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; width: 98px; color: var(--ink); font-size: 11px; font-weight: 720; text-align: center; }
-    .marker::after { width: 2px; height: 42px; background: currentColor; content: ""; }
-    .marker.event { color: var(--amber); transition: left .3s ease; }
-    .marker.event .tag { color: #774804; background: var(--amber-soft); border: 1px solid #e0bc76; }
-    .marker.lock { right: -1px; left: auto; transform: none; color: var(--red); }
-    .marker.lock::after { height: 42px; }
-    .marker .tag { padding: 4px 6px; background: #fff; border: 1px solid var(--line); border-radius: 4px; white-space: nowrap; }
-    .tick { position: absolute; top: 68px; width: 1px; height: 9px; background: #a5b1aa; }
-    .tick span { position: absolute; top: 13px; transform: translateX(-50%); color: var(--muted); font-size: 10px; white-space: nowrap; }
-    .t0 { left: 0; }.t1 { left: 33.33%; }.t2 { left: 66.66%; }.t3 { right: 0; }
-    .timeline-key { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; color: var(--muted); font-size: 11px; }
-    .timeline-key span { display: inline-flex; align-items: center; gap: 6px; }
-    .line-key { width: 18px; height: 3px; background: var(--green); }.line-key.red { background: var(--red); }.line-key.amber { background: var(--amber); }
-
-    .lifecycle { padding: 20px; }
-    .section-label { margin: 0 0 13px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: 0; text-transform: uppercase; }
-    .heat-lane { display: grid; grid-template-columns: 115px minmax(0, 1fr); gap: 12px; align-items: center; }
-    .heat-lane + .heat-lane { margin-top: 10px; }
-    .heat-name { color: #3a4941; font-size: 12px; font-weight: 720; }
-    .heat-track { position: relative; display: flex; min-height: 43px; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: #f8f9f7; }
-    .heat-stage { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; border-right: 1px solid #e1e6e1; color: var(--muted); font-size: 11px; transition: background .25s ease, color .25s ease; }
-    .heat-stage:last-child { border-right: 0; }
-    .heat-stage.pre { width: 42%; }.heat-stage.locked { width: 22%; }.heat-stage.future { flex: 1; }
-    .heat-stage .state-pill { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); padding: 1px 5px; border-radius: 3px; font-size: 9px; white-space: nowrap; }
-    .heat-stage.pre.active { color: #07563f; background: var(--green-soft); }.heat-stage.pre.active .state-pill { color: #07563f; background: #bde1ce; }
-    .heat-stage.locked.active { color: #7c2929; background: var(--red-soft); }.heat-stage.locked.active .state-pill { color: #7c2929; background: #edbebe; }
-    .heat-stage.impacted { color: #7b4e06; background: var(--amber-soft); }.heat-stage.impacted .state-pill { color: #7b4e06; background: #f4d596; }
-    .heat-stage.excluded { color: #7a3737; background: #f5eded; }.heat-stage.excluded .state-pill { color: #7a3737; background: #ebcccc; }
-    .state-note { margin: 15px 0 0 127px; color: var(--muted); font-size: 11px; }
-
-    .flow-panel { padding: 20px; }
-    .flow-grid { display: grid; grid-template-columns: 1fr 36px 1fr 36px 1fr; align-items: stretch; }
-    .flow-node { min-height: 154px; padding: 15px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfa; transition: border-color .25s ease, background .25s ease, box-shadow .25s ease; }
-    .flow-node.active { border-color: #6eb393; background: var(--green-soft); box-shadow: 0 8px 20px rgba(23, 120, 95, .12); }
-    .flow-node.warning { border-color: #e2b65d; background: var(--amber-soft); }.flow-node.danger { border-color: #db9494; background: var(--red-soft); }.flow-node.info { border-color: #96bdd6; background: var(--blue-soft); }
-    .node-kicker { margin: 0; color: var(--muted); font-size: 10px; font-weight: 760; }
-    .flow-node h3 { margin: 7px 0 6px; font-size: 14px; line-height: 1.25; }
-    .flow-node p { margin: 0; color: #53625a; font-size: 11px; }
-    .node-state { display: inline-block; margin-top: 12px; padding: 4px 6px; color: var(--muted); background: #edf0ec; border-radius: 3px; font-size: 10px; font-weight: 720; }
-    .flow-node.active .node-state { color: #07563f; background: #c5e7d3; }.flow-node.warning .node-state { color: #7a4a00; background: #f3d493; }.flow-node.danger .node-state { color: #832c2c; background: #f0c3c3; }.flow-node.info .node-state { color: #1e5a82; background: #c7e2f3; }
-    .flow-arrow { position: relative; min-width: 0; }
-    .flow-arrow::before { position: absolute; top: 50%; right: 6px; left: 6px; height: 2px; background: #c9d2cb; content: ""; }
-    .flow-arrow::after { position: absolute; top: calc(50% - 4px); right: 5px; width: 8px; height: 8px; border-top: 2px solid #c9d2cb; border-right: 2px solid #c9d2cb; transform: rotate(45deg); content: ""; }
-    .flow-caption { display: grid; grid-template-columns: 1fr 36px 1fr 36px 1fr; margin-top: 8px; color: var(--muted); font-size: 10px; text-align: center; }
-
-    .result-panel { position: sticky; top: 18px; overflow: hidden; }
-    .result-top { padding: 20px; color: #fff; background: var(--ink); }
-    .result-top .eyebrow { color: #a7d4b9; }.result-top h2 { margin: 0; font-size: 18px; line-height: 1.2; }.result-top p { margin: 7px 0 0; color: #c7d0ca; font-size: 12px; }
-    .outcome { margin: 18px 20px 0; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: #f8faf7; }
-    .outcome-label { margin: 0; color: var(--muted); font-size: 10px; font-weight: 760; }
-    .outcome strong { display: block; margin-top: 4px; font-size: 17px; line-height: 1.25; }
-    .outcome span { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
-    .metric-list { margin: 16px 20px 0; border-top: 1px solid var(--line); }
-    .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
-    .metric span { color: var(--muted); font-size: 12px; }.metric strong { text-align: right; font-size: 13px; }.metric strong.good { color: var(--green); }.metric strong.alert { color: var(--red); }.metric strong.wait { color: var(--amber); }
-    .trace { margin: 17px 20px 20px; }
-    .trace-title { margin: 0 0 10px; font-size: 12px; }
-    .trace-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-    .trace-item { display: grid; grid-template-columns: 9px 1fr; gap: 9px; align-items: start; color: #55635c; font-size: 11px; }
-    .trace-item .dot { width: 8px; height: 8px; margin-top: 4px; }.trace-item.info .dot { background: var(--blue); }.trace-item.warning .dot { background: var(--amber); }.trace-item.danger .dot { background: var(--red); }
-    .empty-trace { color: var(--muted); font-size: 11px; }
-    .footnote { margin: 20px 0 0; color: var(--muted); font-size: 11px; }
-
-    @media (max-width: 1120px) {
-      .workspace { grid-template-columns: 280px minmax(0, 1fr); }.result-panel { grid-column: 1 / -1; position: static; }.result-panel .panel-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }.outcome { margin-top: 18px; }.metric-list { grid-column: 1; }.trace { grid-column: 2; grid-row: 1 / span 2; margin-top: 18px; }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(39, 111, 157, .25);
+      outline-offset: 2px;
     }
-    @media (max-width: 760px) {
-      .app-shell { padding: 18px 14px 30px; }.topbar { display: block; }.legend { justify-content: flex-start; margin-top: 16px; }.notice { display: block; }.notice small { display: block; margin-top: 4px; }.workspace { grid-template-columns: 1fr; }.result-panel { grid-column: auto; }.result-panel .panel-body { display: block; }.trace { margin-top: 17px; }.timeline-top { display: block; }.current-time { display: inline-block; margin-top: 12px; }.time-rail { margin-right: 8px; margin-left: 8px; }.heat-lane { grid-template-columns: 92px minmax(0, 1fr); }.state-note { margin-left: 104px; }.flow-grid { grid-template-columns: 1fr; gap: 10px; }.flow-node { min-height: auto; }.flow-arrow { height: 24px; }.flow-arrow::before { top: 11px; right: auto; bottom: auto; left: 50%; width: 2px; height: 15px; }.flow-arrow::after { top: auto; right: auto; bottom: 1px; left: calc(50% - 4px); transform: rotate(135deg); }.flow-caption { display: none; }
+
+    .shell { max-width: 1380px; margin: 0 auto; padding: 24px 28px 36px; }
+    .header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+    .brand-line { margin: 0 0 5px; color: var(--green); font-size: 12px; font-weight: 700; }
+    h1 { margin: 0; font-size: 30px; line-height: 1.15; letter-spacing: 0; }
+    .header-note { max-width: 560px; margin: 0; color: var(--muted); font-size: 13px; text-align: right; }
+
+    .control-bar {
+      display: grid;
+      grid-template-columns: minmax(330px, 1.2fr) 180px minmax(300px, 1fr);
+      gap: 24px;
+      align-items: end;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .control-label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .scenario-control { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .scenario-control button { min-height: 40px; padding: 8px 10px; color: #48554e; background: var(--surface); border: 0; border-right: 1px solid var(--line); }
+    .scenario-control button:last-child { border-right: 0; }
+    .scenario-control button:hover { background: var(--soft); }
+    .scenario-control button[aria-pressed="true"] { color: #fff; background: var(--ink); font-weight: 700; }
+    select { width: 100%; min-height: 40px; padding: 0 34px 0 11px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+    .time-control { min-width: 0; }
+    .time-control-top { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+    .time-control-top .control-label { margin: 0; }
+    .time-value { color: var(--ink); font-size: 12px; font-weight: 700; white-space: nowrap; }
+    input[type="range"] { width: 100%; margin: 0; accent-color: var(--green); }
+    .time-scale { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font-size: 10px; }
+
+    .status-line { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 0 15px; }
+    .status-main { display: flex; align-items: center; min-width: 0; gap: 11px; }
+    .status-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
+    .status-main strong { display: block; font-size: 16px; }
+    .status-main span { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .budget { flex: 0 0 auto; color: var(--green); font-size: 13px; font-weight: 700; }
+
+    .visual-stage { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+    .timeline { padding: 24px 28px 22px; border-bottom: 1px solid var(--line); }
+    .section-head { display: flex; justify-content: space-between; gap: 20px; align-items: baseline; }
+    .section-head h2 { margin: 0; font-size: 14px; }
+    .section-head span { color: var(--muted); font-size: 11px; }
+    .rail { position: relative; height: 74px; margin: 18px 9px 0; }
+    .rail-base { position: absolute; top: 29px; right: 0; left: 0; height: 3px; background: var(--line); }
+    .rail-window { position: absolute; top: 29px; right: 0; left: 0; height: 3px; background: var(--green); }
+    .safety-zone { position: absolute; top: 20px; right: 0; width: 2%; min-width: 8px; height: 21px; background: var(--red-soft); border-left: 2px solid var(--red); }
+    .event-marker { position: absolute; top: 9px; transform: translateX(-50%); transition: left .2s ease; }
+    .event-marker::before { display: block; width: 2px; height: 32px; margin: 0 auto; background: var(--orange); content: ""; }
+    .event-marker span { position: absolute; top: -8px; left: 50%; transform: translate(-50%, -100%); padding: 3px 6px; color: #7b4304; background: var(--orange-soft); border-radius: 3px; font-size: 10px; white-space: nowrap; }
+    .tick { position: absolute; top: 39px; color: var(--muted); font-size: 10px; }
+    .tick::before { position: absolute; top: -10px; left: 50%; width: 1px; height: 7px; background: #9ea9a2; content: ""; }
+    .tick.start { left: 0; transform: translateX(-20%); }
+    .tick.middle { left: 50%; transform: translateX(-50%); }
+    .tick.safe { right: 3.5%; transform: translateX(-20%); color: var(--red); }
+    .tick.end { right: 0; transform: translateX(20%); }
+
+    .flow { padding: 26px 28px 28px; }
+    .flow-track { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin-top: 24px; }
+    .step { position: relative; min-width: 0; padding: 0 15px 0 0; }
+    .step:not(:last-child)::after { position: absolute; top: 14px; right: 0; left: 31px; height: 2px; background: var(--line); content: ""; }
+    .step-number { position: relative; z-index: 1; display: grid; place-items: center; width: 29px; height: 29px; color: var(--muted); background: var(--surface); border: 2px solid var(--line); border-radius: 50%; font-size: 11px; font-weight: 700; }
+    .step h3 { margin: 12px 0 4px; font-size: 13px; line-height: 1.3; }
+    .step p { margin: 0; padding-right: 8px; color: var(--muted); font-size: 11px; }
+    .step-state { display: inline-block; margin-top: 9px; color: var(--muted); font-size: 10px; font-weight: 700; }
+    .step.done .step-number { color: #fff; background: var(--green); border-color: var(--green); }
+    .step.done:not(:last-child)::after { background: var(--green); }
+    .step.active .step-number { color: #fff; background: var(--blue); border-color: var(--blue); }
+    .step.active .step-state { color: var(--blue); }
+    .step.warning .step-number { color: #fff; background: var(--orange); border-color: var(--orange); }
+    .step.warning .step-state { color: var(--orange); }
+    .step.failed .step-number { color: #fff; background: var(--red); border-color: var(--red); }
+    .step.failed .step-state { color: var(--red); }
+    .step.muted { opacity: .42; }
+
+    .scope { display: grid; grid-template-columns: 180px minmax(0, 1fr) 230px; align-items: center; gap: 20px; padding: 18px 28px; background: #fafbf9; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; }
+    .scope-title h2 { margin: 0; font-size: 13px; }
+    .scope-title span { color: var(--muted); font-size: 11px; }
+    .heats { display: flex; flex-wrap: wrap; gap: 8px; }
+    .heat { display: inline-flex; align-items: center; gap: 7px; padding: 6px 9px; color: #3f4c45; background: var(--soft); border-radius: 4px; font-size: 11px; }
+    .heat i { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+    .heat.locked i { background: var(--red); }
+    .heat.locked { color: #753737; background: var(--red-soft); }
+    .scope-note { margin: 0; color: var(--muted); font-size: 11px; text-align: right; }
+
+    .explanation { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 18px; }
+    .explanation article { padding-top: 13px; border-top: 2px solid var(--line); }
+    .explanation article.active { border-top-color: var(--green); }
+    .explanation h3 { margin: 0 0 4px; font-size: 12px; }
+    .explanation p { margin: 0; color: var(--muted); font-size: 11px; }
+
+    .footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 18px; color: var(--muted); font-size: 10px; }
+
+    @media (max-width: 900px) {
+      .shell { padding: 20px; }
+      .header { align-items: flex-start; }
+      .header-note { max-width: 390px; }
+      .control-bar { grid-template-columns: 1fr 170px; }
+      .time-control { grid-column: 1 / -1; }
+      .flow-track { grid-template-columns: repeat(3, 1fr); row-gap: 28px; }
+      .step:nth-child(3)::after { display: none; }
+      .scope { grid-template-columns: 150px 1fr; }
+      .scope-note { grid-column: 1 / -1; text-align: left; }
+    }
+
+    @media (max-width: 620px) {
+      .shell { padding: 16px 14px 28px; }
+      .header { display: block; }
+      h1 { font-size: 25px; }
+      .header-note { margin-top: 9px; text-align: left; }
+      .control-bar { grid-template-columns: 1fr; gap: 15px; }
+      .time-control { grid-column: auto; }
+      .scenario-control button { min-height: 44px; padding: 7px 5px; font-size: 12px; }
+      .status-line { align-items: flex-start; }
+      .budget { margin-top: 2px; }
+      .timeline, .flow { padding-right: 18px; padding-left: 18px; }
+      .section-head { display: block; }
+      .section-head span { display: block; margin-top: 4px; }
+      .rail { margin-right: 3px; margin-left: 3px; }
+      .tick.safe { top: 54px; right: 0; transform: none; }
+      .tick.safe::before { display: none; }
+      .tick.end { right: 0; transform: none; }
+      .flow-track { grid-template-columns: 1fr; row-gap: 0; margin-left: 2px; }
+      .step { min-height: 93px; padding: 0 0 17px 48px; }
+      .step:not(:last-child)::after { top: 29px; bottom: 0; left: 14px; width: 2px; height: auto; }
+      .step-number { position: absolute; top: 0; left: 0; }
+      .step h3 { margin-top: 0; padding-top: 5px; }
+      .step:nth-child(3)::after { display: block; }
+      .scope { grid-template-columns: 1fr; gap: 11px; padding-right: 18px; padding-left: 18px; }
+      .scope-note { grid-column: auto; }
+      .explanation { grid-template-columns: 1fr; gap: 13px; }
+      .footer { display: block; }
+      .footer span { display: block; margin-top: 4px; }
     }
   </style>
 </head>
 <body>
-  <main class="app-shell">
-    <header class="topbar">
+  <main class="shell">
+    <header class="header">
       <div>
-        <p class="eyebrow">钢包配包 / 交互式运行视图</p>
-        <h1>局部重调度流程演示</h1>
-        <p class="subhead">从开吹前 180 分钟的预配，到扰动发生后的决策树、LLM 兜底与人工复核。所有时间均以最早开浇时刻为基准。</p>
+        <p class="brand-line">钢包预配与局部重调度</p>
+        <h1>一次扰动，系统如何决策</h1>
       </div>
-      <div class="legend" aria-label="状态图例">
-        <span><i class="dot"></i>正常完成</span>
-        <span><i class="dot blue"></i>计算中</span>
-        <span><i class="dot amber"></i>扰动 / 等待</span>
-        <span><i class="dot red"></i>锁定 / 人工复核</span>
-      </div>
+      <p class="header-note">开吹前 180 分钟进入预配；扰动后先跑决策树，无解且预算充足才调用 LLM，安全缓冲内转人工。</p>
     </header>
 
-    <div class="notice">
-      <div><strong>时间语义：</strong>180 分钟是预配窗口；90 秒是安全缓冲。LLM 的最大可用时间 = 距最早开浇的剩余时间 - 90 秒。</div>
-      <small>演示模式，不会调用模型或修改生产数据</small>
-    </div>
-
-    <section class="workspace" aria-label="局部重调度交互式演示">
-      <aside class="panel control-panel" aria-label="模拟条件">
-        <div class="panel-head"><div><h2>模拟条件</h2><p>改变输入，观察真实控制策略</p></div></div>
-        <div class="panel-body">
-          <div class="control-group">
-            <span class="field-label">扰动类型</span>
-            <div class="chip-grid" id="disturbanceChoices">
-              <button class="chip active" data-kind="crane_offline" type="button">行车不可用</button>
-              <button class="chip" data-kind="ladle_unavailable" type="button">钢包不可用</button>
-              <button class="chip" data-kind="facility_unavailable" type="button">设施不可用</button>
-              <button class="chip" data-kind="schedule_deviation" type="button">计划偏差</button>
-            </div>
-          </div>
-
-          <div class="control-group">
-            <label class="field-label" for="timeToPour">距离最早开浇</label>
-            <div class="range-readout"><strong id="timeReadout">7 分 00 秒</strong><span id="eventPosition">位于预配窗口内</span></div>
-            <input id="timeToPour" type="range" min="0" max="10800" step="30" value="420">
-            <div class="scale"><span>开浇</span><span>90 秒安全缓冲</span><span>180 分钟</span></div>
-            <div class="formula" id="formula">420 秒 - 90 秒 = <strong>330 秒 LLM 预算</strong></div>
-          </div>
-
-          <div class="control-group">
-            <span class="field-label">决策树局部重排</span>
-            <div class="segmented" id="treeChoices">
-              <button class="segment active" data-tree="success" type="button">可行</button>
-              <button class="segment" data-tree="fail" type="button">不可行</button>
-            </div>
-          </div>
-
-          <div class="control-group">
-            <span class="field-label">LLM ReAct 结果</span>
-            <div class="segmented" id="llmChoices">
-              <button class="segment active" data-llm="success" type="button">有效方案</button>
-              <button class="segment" data-llm="fail" type="button">失败 / 超时</button>
-            </div>
-          </div>
-
-          <button id="runSimulation" class="run-button" type="button">执行本次推演</button>
+    <section class="control-bar" aria-label="演示条件">
+      <div>
+        <span class="control-label">查看路径</span>
+        <div class="scenario-control" id="scenarioControl">
+          <button type="button" data-route="tree" aria-pressed="true">决策树成功</button>
+          <button type="button" data-route="llm" aria-pressed="false">LLM 兜底</button>
+          <button type="button" data-route="manual" aria-pressed="false">人工复核</button>
         </div>
-      </aside>
-
-      <section class="main-stack" aria-label="流程主视图">
-        <section class="panel timeline-panel">
-          <div class="timeline-top"><div><h2>预配时间线</h2><p>每炉次进入窗口时预分配，到开吹时锁定，锁定分配不可被扰动改写。</p></div><span id="timelineStatus" class="current-time">预算充足</span></div>
-          <div class="time-rail" aria-label="开吹前 180 分钟时间轴">
-            <div class="rail-line"></div><div class="preallocation-band"></div><div class="buffer-band"></div>
-            <div class="marker event" id="eventMarker" style="left: 96.1%"><span class="tag">扰动发生</span></div>
-            <div class="marker lock"><span class="tag">开吹 / 锁定</span></div>
-            <div class="tick t0"><span>-180 分</span></div><div class="tick t1"><span>-120 分</span></div><div class="tick t2"><span>-60 分</span></div><div class="tick t3"><span>0</span></div>
-          </div>
-          <div class="timeline-key"><span><i class="line-key"></i>预配窗口</span><span><i class="line-key amber"></i>当前事件</span><span><i class="line-key red"></i>90 秒安全缓冲</span></div>
-        </section>
-
-        <section class="panel lifecycle">
-          <p class="section-label">炉次生命周期与影响范围</p>
-          <div class="heat-lane"><span class="heat-name">炉次 H-206</span><div class="heat-track"><div class="heat-stage pre active">预配阶段<span class="state-pill">preallocated</span></div><div class="heat-stage future">待开吹</div></div></div>
-          <div class="heat-lane"><span class="heat-name">炉次 H-207</span><div class="heat-track"><div class="heat-stage pre active" id="affectedHeat">预配阶段<span class="state-pill">待评估</span></div><div class="heat-stage future">待开吹</div></div></div>
-          <div class="heat-lane"><span class="heat-name">炉次 H-203</span><div class="heat-track"><div class="heat-stage pre"></div><div class="heat-stage locked active" id="lockedHeat">已开吹<span class="state-pill">locked</span></div><div class="heat-stage future">不参与重排</div></div></div>
-          <p class="state-note" id="scopeNote">扰动仅影响 H-206、H-207 等未锁定炉次；H-203 保留原钢包与行车分配。</p>
-        </section>
-
-        <section class="panel flow-panel">
-          <p class="section-label">分级响应控制器</p>
-          <div class="flow-grid">
-            <article class="flow-node active" id="disturbanceNode"><p class="node-kicker">01 / 事件分析</p><h3 id="disturbanceTitle">行车不可用</h3><p>确定受影响资源和可重调度炉次。锁定炉次仅保留在审计记录。</p><span class="node-state" id="scopeState">2 个炉次待重排</span></article>
-            <div class="flow-arrow" aria-hidden="true"></div>
-            <article class="flow-node" id="treeNode"><p class="node-kicker">02 / 首选路径</p><h3>决策树局部重排</h3><p>沿用钢包状态、载重、运行区间、时间窗和安全间距等硬约束。</p><span class="node-state" id="treeState">等待执行</span></article>
-            <div class="flow-arrow" aria-hidden="true"></div>
-            <article class="flow-node" id="fallbackNode"><p class="node-kicker">03 / 兜底或人工</p><h3 id="fallbackTitle">结果待定</h3><p id="fallbackText">仅当决策树失败且仍有超过 90 秒安全缓冲的预算时，才允许尝试 LLM。</p><span class="node-state" id="fallbackState">等待输入</span></article>
-          </div>
-          <div class="flow-caption"><span>排除 locked</span><span></span><span>成功即结束</span><span></span><span>受预算与校验约束</span></div>
-        </section>
-      </section>
-
-      <aside class="panel result-panel" aria-live="polite">
-        <div class="result-top"><p class="eyebrow">本次推演</p><h2 id="resultTitle">决策树优先</h2><p id="resultSummary">先运行局部决策树；当前场景尚未执行。</p></div>
-        <div class="panel-body">
-          <div class="outcome" id="outcomeBox"><p class="outcome-label">最终路径</p><strong id="outcomePath">等待推演</strong><span id="outcomeDetail">调整左侧条件后执行</span></div>
-          <div class="metric-list">
-            <div class="metric"><span>LLM 剩余预算</span><strong id="budgetMetric" class="good">330 秒</strong></div>
-            <div class="metric"><span>锁定炉次</span><strong>1 条，保持不变</strong></div>
-            <div class="metric"><span>人工复核</span><strong id="reviewMetric">未触发</strong></div>
-            <div class="metric"><span>方案硬约束校验</span><strong id="validationMetric">等待执行</strong></div>
-          </div>
-          <div class="trace"><h3 class="trace-title">执行轨迹</h3><ul id="traceList" class="trace-list"><li class="empty-trace">点击“执行本次推演”查看逐步决策。</li></ul></div>
-        </div>
-      </aside>
+      </div>
+      <label>
+        <span class="control-label">扰动类型</span>
+        <select id="disturbance">
+          <option value="行车不可用">行车不可用</option>
+          <option value="钢包不可用">钢包不可用</option>
+          <option value="设施不可用">设施不可用</option>
+          <option value="计划偏差">计划偏差</option>
+        </select>
+      </label>
+      <div class="time-control">
+        <div class="time-control-top"><label class="control-label" for="timeToPour">距离最早开浇</label><span class="time-value" id="timeValue">7 分 00 秒</span></div>
+        <input id="timeToPour" type="range" min="0" max="10800" step="30" value="420">
+        <div class="time-scale"><span>开浇</span><span>90 秒缓冲</span><span>180 分钟</span></div>
+      </div>
     </section>
-    <p class="footnote">说明：本页面解释已实现的控制逻辑。它不替代真实运行入口、生产控制系统或现场人工审批。</p>
+
+    <section class="status-line" aria-live="polite">
+      <div class="status-main"><i class="status-dot" id="statusDot"></i><div><strong id="statusTitle">决策树局部重排成功</strong><span id="statusText">受影响炉次完成重新分配，LLM 未触发。</span></div></div>
+      <div class="budget" id="budget">LLM 预算 330 秒</div>
+    </section>
+
+    <section class="visual-stage">
+      <div class="timeline">
+        <div class="section-head"><h2>预配时间轴</h2><span>180 分钟窗口与 90 秒安全缓冲是两个不同概念</span></div>
+        <div class="rail" aria-label="预配时间轴">
+          <div class="rail-base"></div>
+          <div class="rail-window"></div>
+          <div class="safety-zone"></div>
+          <div class="event-marker" id="eventMarker"><span id="eventLabel">行车不可用</span></div>
+          <div class="tick start">-180 分钟</div>
+          <div class="tick middle">-90 分钟</div>
+          <div class="tick safe">-90 秒</div>
+          <div class="tick end">开浇</div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="section-head"><h2>实际执行路径</h2><span id="formula">420 - 90 = 330 秒可用预算</span></div>
+        <div class="flow-track">
+          <article class="step done" id="stepPreallocate">
+            <span class="step-number">1</span><h3>滑窗预配</h3><p>炉次进入开吹前 180 分钟窗口。</p><span class="step-state">preallocated</span>
+          </article>
+          <article class="step done" id="stepEvent">
+            <span class="step-number">2</span><h3 id="eventTitle">行车不可用</h3><p>计算影响范围，排除已锁定炉次。</p><span class="step-state">2 条受影响</span>
+          </article>
+          <article class="step done" id="stepTree">
+            <span class="step-number">3</span><h3>决策树局部重排</h3><p>先执行既有全部硬约束。</p><span class="step-state" id="treeState">方案可行</span>
+          </article>
+          <article class="step muted" id="stepBudget">
+            <span class="step-number">4</span><h3>检查安全预算</h3><p>最早开浇 - 事件时刻 - 90 秒。</p><span class="step-state" id="budgetState">无需检查</span>
+          </article>
+          <article class="step muted" id="stepLlm">
+            <span class="step-number">5</span><h3>LLM ReAct</h3><p>完整映射仍需通过同一套校验。</p><span class="step-state" id="llmState">未调用</span>
+          </article>
+          <article class="step done" id="stepOutcome">
+            <span class="step-number">6</span><h3 id="outcomeTitle">采用决策树结果</h3><p id="outcomeText">局部方案写入审计，流程结束。</p><span class="step-state" id="outcomeState">完成</span>
+          </article>
+        </div>
+      </div>
+
+      <div class="scope">
+        <div class="scope-title"><h2>本次影响范围</h2><span>只重排未锁定炉次</span></div>
+        <div class="heats"><span class="heat"><i></i>H-206 待重排</span><span class="heat"><i></i>H-207 待重排</span><span class="heat locked"><i></i>H-203 locked，保持原分配</span></div>
+        <p class="scope-note" id="scopeNote">锁定炉次不进入决策树或 LLM 候选集。</p>
+      </div>
+    </section>
+
+    <section class="explanation" aria-label="关键规则">
+      <article class="active"><h3>决策树永远先执行</h3><p>只要它能生成合规方案，系统不会调用 LLM。</p></article>
+      <article><h3>LLM 不是放宽约束</h3><p>缺失、重复、超时或违反硬约束的结果会被拒绝。</p></article>
+      <article><h3>90 秒内转人工</h3><p>预算耗尽后不再调用 LLM，返回 Frozen 和人工复核信号。</p></article>
+    </section>
+
+    <footer class="footer"><span>交互演示，不调用模型或生产接口</span><span>规则：earliest_pour - occurred_at - 90s</span></footer>
   </main>
 
   <script>
     (() => {
-      const labels = {
-        crane_offline: "行车不可用",
-        ladle_unavailable: "钢包不可用",
-        facility_unavailable: "设施不可用",
-        schedule_deviation: "计划偏差"
-      };
-      const state = { kind: "crane_offline", secondsToPour: 420, tree: "success", llm: "success" };
-      const byId = (id) => document.getElementById(id);
+      const state = { route: "tree", seconds: 420, event: "行车不可用" };
+      const id = (name) => document.getElementById(name);
+      const steps = ["stepPreallocate", "stepEvent", "stepTree", "stepBudget", "stepLlm", "stepOutcome"];
       const formatTime = (seconds) => `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, "0")} 秒`;
-      const setActive = (root, selector, value, attr, danger = false) => {
-        root.querySelectorAll(selector).forEach((button) => {
-          const active = button.dataset[attr] === value;
-          button.classList.toggle("active", active && !(danger && value === "fail"));
-          button.classList.toggle("danger-active", active && danger && value === "fail");
-        });
-      };
-      const resetNodes = () => ["disturbanceNode", "treeNode", "fallbackNode"].forEach((id) => byId(id).className = "flow-node");
-      const setNode = (id, type) => byId(id).className = `flow-node ${type}`;
-      const trace = (items) => {
-        const list = byId("traceList");
-        list.innerHTML = items.map((item) => `<li class="trace-item ${item.type}"><i class="dot"></i><span>${item.text}</span></li>`).join("");
-      };
-      const applyTiming = () => {
-        const seconds = state.secondsToPour;
-        const budget = Math.max(0, seconds - 90);
-        const percentage = Math.max(0, Math.min(100, 100 - seconds / 10800 * 100));
-        byId("timeReadout").textContent = formatTime(seconds);
-        byId("eventPosition").textContent = seconds <= 90 ? "已进入安全缓冲" : seconds > 10800 ? "窗口外" : "位于预配窗口内";
-        byId("formula").innerHTML = `${seconds} 秒 - 90 秒 = <strong>${budget} 秒 LLM 预算</strong>`;
-        byId("eventMarker").style.left = `${percentage}%`;
-        byId("budgetMetric").textContent = `${budget} 秒`;
-        byId("budgetMetric").className = seconds <= 90 ? "alert" : seconds <= 240 ? "wait" : "good";
-        byId("timelineStatus").textContent = seconds <= 90 ? "安全缓冲已到" : seconds <= 240 ? "预算紧张" : "预算充足";
-        byId("timelineStatus").style.color = seconds <= 90 ? "#8d2f2f" : seconds <= 240 ? "#7a4d00" : "#07563f";
-        byId("timelineStatus").style.background = seconds <= 90 ? "#fae5e5" : seconds <= 240 ? "#fff0d3" : "#e2f2e9";
-      };
-      const updateInputs = () => {
-        setActive(byId("disturbanceChoices"), ".chip", state.kind, "kind");
-        setActive(byId("treeChoices"), ".segment", state.tree, "tree", true);
-        setActive(byId("llmChoices"), ".segment", state.llm, "llm", true);
-        byId("disturbanceTitle").textContent = labels[state.kind];
-        applyTiming();
-      };
-      const run = () => {
-        const budget = Math.max(0, state.secondsToPour - 90);
-        const treeSuccess = state.tree === "success";
-        const canUseLlm = !treeSuccess && budget > 0;
-        resetNodes();
-        setNode("disturbanceNode", "active");
-        byId("scopeState").textContent = "2 个炉次待重排";
-        byId("affectedHeat").className = "heat-stage pre active impacted";
-        byId("affectedHeat").innerHTML = "受扰动影响<span class=\"state-pill\">preallocated</span>";
-        byId("lockedHeat").className = "heat-stage locked active excluded";
-        byId("scopeNote").textContent = `${labels[state.kind]}影响 H-206、H-207；H-203 已 locked，原分配不可修改。`;
+      const setStep = (name, className) => { id(name).className = `step ${className}`; };
 
-        const events = [
-          { type: "warning", text: `识别到“${labels[state.kind]}”事件，锁定炉次已从重排范围排除。` },
-          { type: "info", text: "决策树开始局部重排，并执行既有硬约束校验。" }
-        ];
-        setNode("treeNode", treeSuccess ? "active" : "warning");
-        byId("treeState").textContent = treeSuccess ? "可行方案已通过校验" : "局部范围内无可行方案";
+      function render() {
+        const budget = Math.max(0, state.seconds - 90);
+        const llmAllowed = budget > 0;
+        const markerPosition = Math.max(3, Math.min(94, 100 - state.seconds / 10800 * 100));
+        id("timeValue").textContent = formatTime(state.seconds);
+        id("eventMarker").style.left = `${markerPosition}%`;
+        id("eventLabel").textContent = state.event;
+        id("eventTitle").textContent = state.event;
+        id("formula").textContent = `${state.seconds} - 90 = ${budget} 秒可用预算`;
+        id("budget").textContent = `LLM 预算 ${budget} 秒`;
+        id("budget").style.color = llmAllowed ? "var(--green)" : "var(--red)";
+        steps.forEach((name) => setStep(name, "muted"));
+        setStep("stepPreallocate", "done");
+        setStep("stepEvent", "done");
 
-        if (treeSuccess) {
-          byId("fallbackTitle").textContent = "决策树结果采用";
-          byId("fallbackText").textContent = "决策树已生成完整、合规的局部方案，LLM 不应被调用。";
-          byId("fallbackState").textContent = "LLM 未触发";
-          setNode("fallbackNode", "active");
-          byId("resultTitle").textContent = "决策树局部重排成功";
-          byId("resultSummary").textContent = "受影响炉次重新分配完成，锁定炉次保持不变。";
-          byId("outcomePath").textContent = "决策树成功";
-          byId("outcomeDetail").textContent = "完成局部重排，LLM 未参与";
-          byId("reviewMetric").textContent = "未触发";
-          byId("reviewMetric").className = "good";
-          byId("validationMetric").textContent = "通过";
-          byId("validationMetric").className = "good";
-          events.push({ type: "good", text: "决策树生成完整方案并通过校验，响应结束。" });
-        } else if (!canUseLlm) {
-          byId("fallbackTitle").textContent = "Frozen + 人工复核";
-          byId("fallbackText").textContent = "距离最早开浇不足 90 秒。系统禁止调用 LLM，保留安全缓冲并请求人工处理。";
-          byId("fallbackState").textContent = "预算耗尽，不调用 LLM";
-          setNode("fallbackNode", "danger");
-          byId("resultTitle").textContent = "安全缓冲优先";
-          byId("resultSummary").textContent = "决策树失败且 LLM 预算为 0，进入 Frozen。";
-          byId("outcomePath").textContent = "Frozen / 人工复核";
-          byId("outcomeDetail").textContent = "不得以未校验方案替代人工决策";
-          byId("reviewMetric").textContent = "需要人工复核";
-          byId("reviewMetric").className = "alert";
-          byId("validationMetric").textContent = "无有效方案";
-          byId("validationMetric").className = "alert";
-          events.push({ type: "danger", text: "LLM 预算不大于 0 秒，返回 Frozen 与 human_review_required=true。" });
-        } else if (state.llm === "success") {
-          byId("fallbackTitle").textContent = "LLM 兜底成功";
-          byId("fallbackText").textContent = "LLM 在预算内返回完整映射，并通过相同的硬约束校验后才被采用。";
-          byId("fallbackState").textContent = `${budget} 秒内完成校验`;
-          setNode("fallbackNode", "info");
-          byId("resultTitle").textContent = "LLM ReAct 兜底成功";
-          byId("resultSummary").textContent = "仅因决策树无解且安全预算充足，才进入本路径。";
-          byId("outcomePath").textContent = "LLM 方案已验证";
-          byId("outcomeDetail").textContent = "完整映射 + 硬约束校验通过";
-          byId("reviewMetric").textContent = "未触发";
-          byId("reviewMetric").className = "good";
-          byId("validationMetric").textContent = "通过";
-          byId("validationMetric").className = "good";
-          events.push({ type: "warning", text: `决策树失败，剩余 ${budget} 秒，允许 LLM ReAct 尝试兜底。` });
-          events.push({ type: "info", text: "LLM 返回全量受影响炉次映射；硬约束校验通过，采用方案。" });
+        if (state.route === "tree") {
+          setStep("stepTree", "done");
+          setStep("stepOutcome", "done");
+          id("treeState").textContent = "方案可行";
+          id("budgetState").textContent = "无需检查";
+          id("llmState").textContent = "未调用";
+          id("outcomeTitle").textContent = "采用决策树结果";
+          id("outcomeText").textContent = "局部方案写入审计，流程结束。";
+          id("outcomeState").textContent = "完成";
+          id("statusTitle").textContent = "决策树局部重排成功";
+          id("statusText").textContent = "受影响炉次完成重新分配，LLM 未触发。";
+          id("statusDot").style.background = "var(--green)";
+        } else if (state.route === "llm" && llmAllowed) {
+          setStep("stepTree", "warning");
+          setStep("stepBudget", "done");
+          setStep("stepLlm", "active");
+          setStep("stepOutcome", "done");
+          id("treeState").textContent = "无可行方案";
+          id("budgetState").textContent = `${budget} 秒，可调用`;
+          id("llmState").textContent = "方案通过校验";
+          id("outcomeTitle").textContent = "采用 LLM 方案";
+          id("outcomeText").textContent = "完整映射通过硬约束后写入审计。";
+          id("outcomeState").textContent = "兜底成功";
+          id("statusTitle").textContent = "LLM ReAct 兜底成功";
+          id("statusText").textContent = "决策树无解，LLM 在安全预算内返回合规方案。";
+          id("statusDot").style.background = "var(--blue)";
         } else {
-          byId("fallbackTitle").textContent = "Frozen + 人工复核";
-          byId("fallbackText").textContent = "LLM 超时或输出缺失、重复、非法或违反硬约束，不能成为有效分配。";
-          byId("fallbackState").textContent = "LLM 失败，方案被拒绝";
-          setNode("fallbackNode", "danger");
-          byId("resultTitle").textContent = "LLM 方案不可采用";
-          byId("resultSummary").textContent = "未通过校验的 LLM 输出不会绕过安全规则。";
-          byId("outcomePath").textContent = "Frozen / 人工复核";
-          byId("outcomeDetail").textContent = "保留审计原因，不写入未验证分配";
-          byId("reviewMetric").textContent = "需要人工复核";
-          byId("reviewMetric").className = "alert";
-          byId("validationMetric").textContent = "拒绝 LLM 方案";
-          byId("validationMetric").className = "alert";
-          events.push({ type: "warning", text: `决策树失败，剩余 ${budget} 秒，尝试 LLM ReAct。` });
-          events.push({ type: "danger", text: "LLM 输出超时或未通过完整性 / 硬约束校验，转人工复核。" });
+          setStep("stepTree", "warning");
+          setStep("stepBudget", llmAllowed ? "done" : "failed");
+          setStep("stepLlm", llmAllowed ? "failed" : "muted");
+          setStep("stepOutcome", "failed");
+          id("treeState").textContent = "无可行方案";
+          id("budgetState").textContent = llmAllowed ? `${budget} 秒，可调用` : "预算耗尽";
+          id("llmState").textContent = llmAllowed ? "失败或校验拒绝" : "禁止调用";
+          id("outcomeTitle").textContent = "Frozen + 人工复核";
+          id("outcomeText").textContent = llmAllowed ? "未获得合规方案，保留失败原因。" : "进入 90 秒安全缓冲，不再尝试 LLM。";
+          id("outcomeState").textContent = "需要人工";
+          id("statusTitle").textContent = "转人工复核";
+          id("statusText").textContent = llmAllowed ? "LLM 输出不可采用，未验证方案不会写入分配。" : "决策树失败且预算为 0，系统直接返回 Frozen。";
+          id("statusDot").style.background = "var(--red)";
         }
-        trace(events);
-      };
+      }
 
-      byId("disturbanceChoices").addEventListener("click", (event) => { const button = event.target.closest("button[data-kind]"); if (!button) return; state.kind = button.dataset.kind; updateInputs(); });
-      byId("treeChoices").addEventListener("click", (event) => { const button = event.target.closest("button[data-tree]"); if (!button) return; state.tree = button.dataset.tree; updateInputs(); });
-      byId("llmChoices").addEventListener("click", (event) => { const button = event.target.closest("button[data-llm]"); if (!button) return; state.llm = button.dataset.llm; updateInputs(); });
-      byId("timeToPour").addEventListener("input", (event) => { state.secondsToPour = Number(event.target.value); applyTiming(); });
-      byId("runSimulation").addEventListener("click", run);
-      updateInputs();
-      run();
+      id("scenarioControl").addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-route]");
+        if (!button) return;
+        state.route = button.dataset.route;
+        if (state.route === "llm" && state.seconds <= 90) {
+          state.seconds = 420;
+          id("timeToPour").value = "420";
+        }
+        if (state.route === "manual" && state.seconds > 90) {
+          state.seconds = 60;
+          id("timeToPour").value = "60";
+        }
+        id("scenarioControl").querySelectorAll("button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+        render();
+      });
+      id("disturbance").addEventListener("change", (event) => { state.event = event.target.value; render(); });
+      id("timeToPour").addEventListener("input", (event) => { state.seconds = Number(event.target.value); render(); });
+      render();
     })();
   </script>
 </body>
