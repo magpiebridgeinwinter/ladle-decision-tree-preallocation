@@ -29,3 +29,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 调度流程可视化页面
+
+**Date**: 2026-08-14
+**Task**: 调度流程可视化页面
+**Branch**: `feature-1.0`
+
+### Summary
+
+新增独立交互式网页，演示 180 分钟预配窗口、90 秒安全缓冲、四类扰动、决策树优先、LLM 兜底和 Frozen 人工复核路径；完成桌面与移动端浏览器验证。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b083d8d` | (see git log) |
+
+### Status
+
+[OK] **Completed**

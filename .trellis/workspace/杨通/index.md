@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
+- **Total Sessions**: 2
 - **Last Active**: 2026-08-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~31 | Active |
+| `journal-1.md` | ~52 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-08-14 | 调度流程可视化页面 | `b083d8d` | `feature-1.0` |
 | 1 | 2026-08-14 | LLM 局部重调度真实数据验证 | `2ccbbb5`, `57643db`, `321f2a4`, `7380162` | `feature-1.0` |
 <!-- @@@/auto:session-history -->
 
