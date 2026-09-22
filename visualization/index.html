@@ -3,357 +3,98 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#f5f6f8">
-<title>钢包局部重调度 · 决策流程</title>
+<title>钢包配包 · 事故导览</title>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
---canvas:#f5f6f8;--surface:#fff;--panel:#eef1f6;--panel2:#e6eaf0;
---border:#d4dae3;--border2:#c2c9d5;
---ink:#1a2233;--text:#2d3548;--text2:#6b7689;--text3:#94a0b3;
---accent:#3b5bdb;--accent-d:#2b44a8;--accent-bg:#e8edfe;
---green:#0ca678;--green-d:#088f63;--green-bg:#d7f3e8;
---amber:#e8770e;--amber-d:#c2650a;--amber-bg:#fef0e0;
---blue:#1c7ed6;--blue-bg:#dceaf8;
---red:#e03131;--red-d:#c02626;--red-bg:#fce8e8;
---mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
---sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-}
-html{background:var(--canvas);color-scheme:light}
-body{font-family:var(--sans);background:var(--canvas);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-button,select,input{font:inherit;color:inherit}
-button{cursor:pointer;border:none;background:none}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-
-.wrap{max-width:1280px;margin:0 auto;padding:28px 32px 44px}
-
-/* HEADER */
-.hdr{display:flex;justify-content:space-between;align-items:center;padding-bottom:22px;border-bottom:1px solid var(--border)}
-.hdr-left{display:flex;align-items:center;gap:14px}
-.hdr-icon{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-d));display:grid;place-items:center;flex-shrink:0;box-shadow:0 4px 12px rgba(59,91,219,.18)}
-.hdr-icon svg{width:26px;height:26px;color:#fff}
-.hdr h1{font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
-.hdr p{font-size:12px;color:var(--text2);margin-top:2px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:20px;font-size:11px;font-weight:600}
-.pill-live{background:var(--accent-bg);color:var(--accent-d)}
-.pill-live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* CONTROLS */
-.ctl{display:grid;grid-template-columns:1fr auto auto;gap:18px;align-items:end;padding:18px 0;border-bottom:1px solid var(--border)}
-.ctl-grp{display:flex;flex-direction:column;gap:6px}
-.ctl-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
-.route-tabs{display:flex;gap:2px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:3px}
-.route-tabs button{padding:9px 16px;border-radius:6px;font-size:12px;font-weight:600;color:var(--text2);transition:all .15s;display:flex;align-items:center;gap:7px}
-.route-tabs button:hover{color:var(--ink)}
-.route-tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.06),0 0 0 1px var(--border2)}
-.route-tabs button .dot{width:8px;height:8px;border-radius:50%}
-.dot-green{background:var(--green)}.dot-blue{background:var(--blue)}.dot-red{background:var(--red)}
-select{padding:9px 32px 9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394a0b3' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
-.tc{display:flex;flex-direction:column;gap:4px;min-width:250px}
-.tc-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.tc-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink)}
-input[type=range]{width:100%;height:6px;-webkit-appearance:none;background:var(--border);border-radius:3px;outline:none}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 2px 6px rgba(59,91,219,.25)}
-input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:none}
-.tc-scale{display:flex;justify-content:space-between;font-size:9px;color:var(--text3)}
-
-/* STATUS */
-.statusbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0}
-.sb-left{display:flex;align-items:center;gap:14px}
-.sb-icon{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;transition:all .3s}
-.sb-icon.ok{background:var(--accent-bg);color:var(--accent-d)}
-.sb-icon.llm{background:var(--blue-bg);color:var(--blue)}
-.sb-icon.frozen{background:var(--red-bg);color:var(--red-d)}
-.sb-icon svg{width:22px;height:22px}
-.sb-title{font-size:17px;font-weight:700;color:var(--ink)}
-.sb-sub{font-size:12px;color:var(--text2)}
-.sb-budget{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-family:var(--mono);font-size:13px;font-weight:700;transition:all .3s}
-.sb-budget.pos{background:var(--accent-bg);color:var(--accent-d);border:1px solid rgba(59,91,219,.2)}
-.sb-budget.neg{background:var(--red-bg);color:var(--red-d);border:1px solid rgba(224,49,49,.2)}
-
-/* STAGE */
-.stage{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 8px rgba(26,34,51,.04)}
-
-/* Timeline */
-.tl{padding:22px 26px;border-bottom:1px solid var(--border)}
-.tl-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px}
-.tl-hd h2{font-size:13px;font-weight:700;color:var(--ink)}
-.tl-hd span{font-size:11px;color:var(--text3)}
-.tl-rail{position:relative;height:44px;margin:0 44px}
-.tl-bar{position:absolute;top:20px;left:0;right:0;height:4px;border-radius:2px;background:var(--panel)}
-.tl-fill{position:absolute;top:20px;left:0;height:4px;border-radius:2px;background:linear-gradient(90deg,var(--accent-d),var(--accent));transition:width .3s}
-.tl-safe{position:absolute;top:14px;right:0;width:4px;height:16px;border-radius:2px;background:var(--red)}
-.tl-evt{position:absolute;top:6px;transform:translateX(-50%);transition:left .3s}
-.tl-evt-bar{width:2px;height:30px;background:var(--amber);border-radius:1px;box-shadow:0 0 6px rgba(232,119,14,.3)}
-.tl-evt-lbl{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);padding:3px 8px;background:var(--amber-bg);border:1px solid rgba(232,119,14,.2);border-radius:5px;font-size:10px;font-weight:600;white-space:nowrap;color:var(--amber-d)}
-.tl-ticks{display:flex;justify-content:space-between;margin-top:8px;padding:0 44px}
-.tl-tk{font-size:9px;color:var(--text3);font-weight:500}
-.tl-tk.red{color:var(--red-d)}
-.tl-legend{display:flex;gap:22px;margin-top:16px;padding-top:12px;border-top:1px dashed var(--border)}
-.tl-legend>div{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--text2)}
-.tl-legend b{color:var(--ink);font-weight:600}
-.lg-bar{width:18px;height:4px;border-radius:1px}
-.lg-bar.g{background:linear-gradient(90deg,var(--accent-d),var(--accent))}
-.lg-bar.r{width:4px;height:14px;background:var(--red)}
-
-/* Steps */
-.steps{padding:22px 26px 8px;border-bottom:1px solid var(--border)}
-.steps-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
-.steps-hd h2{font-size:13px;font-weight:700;color:var(--ink)}
-.steps-hd code{font-family:var(--mono);font-size:11px;color:var(--text3)}
-.slist{display:flex;flex-direction:column;gap:2px}
-.s-item{position:relative;display:grid;grid-template-columns:32px 1fr auto;align-items:start;gap:12px;padding:12px;border-radius:8px;transition:all .2s}
-.s-item:hover{background:var(--panel)}
-.s-item:not(:last-child)::after{content:"";position:absolute;left:27px;bottom:-2px;width:2px;height:4px;background:var(--border);z-index:0}
-.s-item.s-done:not(:last-child)::after{background:var(--accent)}
-.s-num{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;font-size:11px;font-weight:700;transition:all .2s;z-index:1}
-.s-item.s-done .s-num{background:var(--accent);color:#fff}
-.s-item.s-active .s-num{background:var(--blue);color:#fff}
-.s-item.s-warn .s-num{background:var(--amber-d);color:#fff}
-.s-item.s-fail .s-num{background:var(--red-d);color:#fff}
-.s-item.s-muted .s-num{background:var(--panel2);color:var(--text3);border:1px solid var(--border)}
-.s-item.s-muted{opacity:.45}
-.s-body h3{font-size:13px;font-weight:600;line-height:1.3;color:var(--ink)}
-.s-body p{font-size:11px;color:var(--text2);line-height:1.5;margin-top:2px}
-.s-body .s-detail{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:3px}
-.s-tag{align-self:start;margin-top:3px;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;white-space:nowrap;transition:all .2s}
-.s-item.s-done .s-tag{background:var(--accent-bg);color:var(--accent-d)}
-.s-item.s-active .s-tag{background:var(--blue-bg);color:var(--blue)}
-.s-item.s-warn .s-tag{background:var(--amber-bg);color:var(--amber-d)}
-.s-item.s-fail .s-tag{background:var(--red-bg);color:var(--red-d)}
-.s-item.s-muted .s-tag{color:var(--text3)}
-
-/* Scope */
-.scope{padding:18px 26px}
-.scope-hd{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px}
-.heat-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.heat{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;transition:all .2s}
-.heat i{width:7px;height:7px;border-radius:50%}
-.heat.affected{background:var(--amber-bg);color:var(--amber-d)}.heat.affected i{background:var(--amber)}
-.heat.resolved{background:var(--green-bg);color:var(--green-d)}.heat.resolved i{background:var(--green)}
-.heat.locked{background:var(--red-bg);color:var(--red-d)}.heat.locked i{background:var(--red)}
-.scope-note{font-size:10px;color:var(--text3);margin-top:8px}
-
-/* Constraints */
-.constraints{padding:18px 26px;border-top:1px solid var(--border)}
-.constraints h3{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:10px}
-.cstr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
-.cstr{display:flex;align-items:center;gap:7px;padding:7px 11px;border-radius:6px;background:var(--panel);font-size:10px;color:var(--text2);border:1px solid var(--border)}
-.cstr svg{width:14px;height:14px;color:var(--accent-d);flex-shrink:0}
-
-/* Rules */
-.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.rules article{padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:10px;transition:border-color .2s;box-shadow:0 1px 4px rgba(26,34,51,.03)}
-.rules article.hl{border-color:rgba(59,91,219,.3);background:var(--accent-bg)}
-.rules h3{font-size:12px;font-weight:700;margin-bottom:5px;color:var(--ink)}
-.rules p{font-size:11px;color:var(--text2);line-height:1.5}
-
-/* Footer */
-.ftr{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
-.ftr span{font-size:10px;color:var(--text3)}
-.ftr code{font-family:var(--mono);font-size:10px;color:var(--text3)}
-
-@media(max-width:920px){
-.wrap{padding:20px}
-.hdr{flex-direction:column;align-items:flex-start;gap:10px}
-.ctl{grid-template-columns:1fr;gap:14px}
-.tc{min-width:0}
-.rules{grid-template-columns:1fr}
-}
-@media(max-width:620px){
-.wrap{padding:16px}
-.hdr h1{font-size:19px}
-.route-tabs button{padding:8px 10px;font-size:11px}
-.statusbar{flex-direction:column;align-items:flex-start;gap:10px}
-.tl,.steps,.scope,.constraints{padding-left:18px;padding-right:18px}
-.tl-rail{margin:0 24px}
-.tl-ticks{padding:0 24px}
-.tl-evt-lbl{font-size:9px;padding:2px 6px;max-width:80px;overflow:hidden;text-overflow:ellipsis}
-.rules{grid-template-columns:1fr}
-.ftr{flex-direction:column}
-}
+:root{--bg:#f3f5f7;--surface:#fff;--surface2:#e9edf1;--ink:#17212b;--muted:#697784;--line:#d6dde3;--blue:#1664d9;--blue-soft:#e7f0ff;--green:#087f5b;--green-soft:#e2f5ee;--amber:#b45309;--amber-soft:#fff0d6;--red:#c92a2a;--red-soft:#ffe6e6;--purple:#6741d9;--shadow:0 10px 30px rgba(23,33,43,.07);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}html{background:var(--bg);color:var(--ink)}body{margin:0;font:14px/1.5 var(--sans);color:var(--ink)}button,input,select{font:inherit}button{cursor:pointer;color:inherit}.app{max-width:1320px;margin:auto;padding:22px 28px 50px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:12px}.mark{width:40px;height:40px;border-radius:10px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800;font-size:18px;box-shadow:0 5px 14px #1664d933}.brand h1{font-size:18px;margin:0;letter-spacing:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.source-badge{padding:7px 10px;border:1px solid #a9d9c8;background:var(--green-soft);color:var(--green);border-radius:7px;font-size:11px;font-weight:700;white-space:nowrap}.tabs{display:flex;gap:4px;padding:14px 0;border-bottom:1px solid var(--line)}.tab{border:0;background:transparent;padding:8px 13px;border-radius:7px;color:var(--muted);font-weight:700}.tab[aria-selected=true]{background:var(--ink);color:#fff}.view{display:none}.view.active{display:block}.mission{display:grid;grid-template-columns:1.3fr .7fr;gap:20px;padding:25px 0 20px}.mission h2{font-size:28px;line-height:1.15;margin:0 0 9px;max-width:680px}.mission h2 em{color:var(--blue);font-style:normal}.mission p{color:var(--muted);max-width:650px;margin:0}.mission-note{align-self:end;border-left:3px solid var(--blue);padding:12px 15px;background:var(--blue-soft);font-size:12px}.mission-note b{display:block;color:var(--blue);margin-bottom:3px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 0 17px}.btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:8px 12px;font-weight:700;box-shadow:0 2px 5px #17212b0a}.btn:hover{border-color:#9bb4d6}.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.ghost{background:transparent;box-shadow:none}.btn.danger{color:var(--red);border-color:#f0b5b5}.timebox{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:16px 18px 13px}.time-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.time-head strong{font-size:15px}.time-now{font:700 20px var(--mono);color:var(--blue)}.range{width:100%;accent-color:var(--blue);margin:14px 0 5px}.ticks{display:flex;justify-content:space-between;color:var(--muted);font:11px var(--mono)}.time-rail{position:relative;height:38px;margin:4px 5px}.time-track,.time-progress{position:absolute;left:0;right:0;top:15px;height:7px;border-radius:7px;background:var(--surface2)}.time-progress{right:auto;background:var(--blue);width:0}.time-marker{position:absolute;top:8px;width:3px;height:22px;border-radius:3px;background:var(--red);left:10%}.time-marker span{position:absolute;top:-23px;left:-20px;white-space:nowrap;color:var(--red);font:700 10px var(--mono)}.phase-line{display:flex;justify-content:space-between;gap:12px;padding-top:8px;font-size:12px}.phase-line b{color:var(--ink)}.phase-line span{color:var(--muted)}.stage-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,.6fr);gap:18px;margin-top:18px}.plant,.side-panel,.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}.plant{padding:16px;min-height:355px}.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:13px}.panel-head h3{margin:0;font-size:15px}.panel-head span{color:var(--muted);font-size:11px}.plant-scene{position:relative;height:255px;background:linear-gradient(180deg,#f9fbfc 0%,#eef2f5 100%);overflow:hidden;border:1px solid var(--line);border-radius:8px}.roof{position:absolute;left:4%;right:4%;top:27px;height:5px;background:#64727e;box-shadow:0 23px #b8c2ca,0 46px #b8c2ca}.track-label{position:absolute;top:7px;left:10px;color:var(--muted);font-size:10px}.crane{position:absolute;top:46px;width:76px;height:65px;transform:translateX(-50%);transition:left .6s,opacity .4s}.crane .bridge{height:12px;border-radius:6px;background:#4e6474;border:2px solid #334653}.crane .leg{position:absolute;top:10px;width:5px;height:39px;background:#4e6474}.crane .leg.left{left:8px}.crane .leg.right{right:8px}.crane .hook{position:absolute;left:50%;top:10px;width:2px;height:33px;background:#26343e}.crane .hook:after{content:"";position:absolute;bottom:-4px;left:-5px;width:11px;height:8px;border:2px solid #26343e;border-top:0;border-radius:0 0 7px 7px}.crane small{position:absolute;top:48px;left:50%;transform:translateX(-50%);font:700 10px var(--mono);white-space:nowrap}.crane.offline{opacity:.45;filter:grayscale(.7)}.crane.fire{opacity:1;filter:none}.fire{display:none;position:absolute;right:-11px;top:-24px;font-size:25px;animation:flicker .35s ease-in-out infinite alternate}.crane.fire .fire{display:block}.smoke{display:none;position:absolute;right:-3px;top:-39px;color:#697784;font-size:16px}.crane.fire .smoke{display:block;animation:smoke 1.2s infinite}.ladle{position:absolute;bottom:57px;width:36px;height:39px;border:4px solid #63717c;border-top:0;border-radius:0 0 18px 18px;transform:translateX(-50%);background:#8c9aa3}.ladle:before{content:"";position:absolute;left:50%;top:-10px;width:3px;height:12px;background:#63717c}.ladle small{position:absolute;top:43px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 10px var(--mono)}.ladle.hot{background:#ec9f31;border-color:#a35d0e;box-shadow:0 0 20px #f08c2855}.station{position:absolute;bottom:30px;width:84px;height:25px;border-top:4px solid #687782;text-align:center;color:var(--muted);font-size:10px;transform:translateX(-50%)}.heat-strip{position:absolute;bottom:9px;left:4%;right:4%;height:4px;background:var(--line)}.heat-dot{position:absolute;bottom:7px;width:8px;height:8px;border-radius:50%;background:#aeb9c1;transform:translateX(-50%);border:2px solid var(--surface)}.heat-dot.locked{background:var(--green)}.heat-dot.window{background:var(--amber);box-shadow:0 0 0 4px #b4530922}.heat-dot.affected{background:var(--red);box-shadow:0 0 0 4px #c92a2a22}.heat-dot.resolved{background:var(--blue)}.scene-caption{display:flex;justify-content:space-between;gap:12px;padding-top:10px;font-size:11px;color:var(--muted)}.scene-caption b{color:var(--ink)}.side-panel{padding:16px}.status-kicker{font-size:11px;color:var(--muted);font-weight:700}.status-title{font-size:20px;font-weight:800;margin:4px 0 6px}.status-copy{font-size:12px;color:var(--muted);min-height:38px}.status-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;font-size:11px;font-weight:800;margin-top:10px}.status-pill.green{background:var(--green-soft);color:var(--green)}.status-pill.amber{background:var(--amber-soft);color:var(--amber)}.status-pill.red{background:var(--red-soft);color:var(--red)}.metric-list{border-top:1px solid var(--line);margin-top:15px;padding-top:10px}.metric-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:12px}.metric-row span{color:var(--muted)}.metric-row b{font:700 12px var(--mono)}.metric-row b.good{color:var(--green)}.metric-row b.bad{color:var(--red)}.chain{margin-top:18px}.chain h3{margin:0 0 11px;font-size:15px}.chain-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.chain-node{min-height:94px;padding:11px;background:var(--surface);border:1px solid var(--line);border-radius:8px;position:relative}.chain-node:not(:last-child):after{content:"→";position:absolute;right:-15px;top:35px;color:var(--blue);font-weight:800;z-index:1}.chain-node.active{border-color:#8db1eb;background:var(--blue-soft)}.chain-node.fail{border-color:#efb6b6;background:var(--red-soft)}.chain-node.done{border-color:#a8dfcb;background:var(--green-soft)}.chain-node small{display:block;color:var(--muted);font-size:10px;margin-bottom:5px}.chain-node b{font-size:12px}.chain-node p{margin:4px 0 0;color:var(--muted);font-size:11px}.scene-section{margin-top:22px}.scene-section .panel{padding:16px}.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}.scene-card{border:1px solid var(--line);background:var(--surface);border-radius:8px;text-align:left;padding:12px;min-height:115px}.scene-card:hover{border-color:#83a9e7}.scene-card.selected{border:2px solid var(--blue);background:var(--blue-soft);padding:11px}.scene-card .card-title{font-weight:800;font-size:12px}.scene-card .card-meta{font:10px var(--mono);color:var(--muted);margin-top:7px}.scene-card .card-result{font-size:11px;margin-top:8px;color:var(--green);font-weight:700}.scene-card.fail .card-result{color:var(--blue)}.scene-card .card-source{font-size:10px;color:var(--muted);margin-top:5px}.evidence-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}.panel{padding:16px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:15px}.stat{padding:12px;background:var(--surface2);border-radius:8px}.stat span{display:block;color:var(--muted);font-size:11px}.stat b{display:block;margin-top:4px;font:800 21px var(--mono)}.stat em{font-size:11px;color:var(--muted);font-style:normal}.heat-band{position:relative;height:100px;background:var(--surface2);border-radius:7px;border-bottom:1px solid var(--line);margin:10px 0}.heat-band .heat-dot{bottom:43px}.band-axis{display:flex;justify-content:space-between;color:var(--muted);font:10px var(--mono);padding-top:8px}.detail-empty{color:var(--muted);font-size:12px;padding:25px 0}.detail h4{margin:14px 0 6px;font-size:12px;color:var(--muted)}.detail dl{display:grid;grid-template-columns:120px 1fr;gap:4px 10px;margin:0;font-size:11px}.detail dt{color:var(--muted)}.detail dd{margin:0;overflow-wrap:anywhere;font-family:var(--mono)}details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer;font-weight:700;font-size:12px}.jsonish{white-space:pre-wrap;word-break:break-word;color:var(--muted);font:10px/1.5 var(--mono);margin:8px 0 0}.compare{margin-top:18px}.compare-table{width:100%;border-collapse:collapse;font-size:12px}.compare-table th,.compare-table td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line)}.compare-table th{color:var(--muted);font-size:11px}.compare-table td:nth-child(n+2){font-family:var(--mono)}.compare-table .good{color:var(--green);font-weight:800}.compare-table .na{color:var(--muted)}.sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.control-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:11px}.control-line input[type=range]{flex:1;min-width:150px;accent-color:var(--blue)}.control-line output{font:800 16px var(--mono);color:var(--blue)}.api-note{font-size:11px;color:var(--muted);margin:7px 0}.api-status{padding:9px;background:var(--surface2);font-size:11px;color:var(--muted);min-height:34px}.api-status.error{background:var(--red-soft);color:var(--red)}.api-status.ok{background:var(--green-soft);color:var(--green)}.footer{margin-top:22px;border-top:1px solid var(--line);padding-top:12px;color:var(--muted);font-size:10px;display:flex;justify-content:space-between;gap:12px}.hidden{display:none!important}@keyframes flicker{from{transform:scale(.9) rotate(-4deg)}to{transform:scale(1.1) rotate(4deg)}}@keyframes smoke{0%{opacity:.2;transform:translateY(5px)}100%{opacity:.8;transform:translateY(-12px)}}
+@media(max-width:1000px){.stage-grid,.evidence-layout,.sim-grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(3,1fr)}}@media(max-width:680px){.app{padding:15px 14px 36px}.topbar{align-items:flex-start}.brand h1{font-size:16px}.source-badge{font-size:10px}.mission{grid-template-columns:1fr;gap:12px;padding-top:18px}.mission h2{font-size:24px}.tabs{overflow:auto}.tab{white-space:nowrap}.chain-grid{grid-template-columns:1fr 1fr}.chain-node:not(:last-child):after{display:none}.cards{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr}.footer{flex-direction:column}.time-head{align-items:flex-start;flex-direction:column;gap:2px}.scene-caption{flex-direction:column;gap:4px}}
+@media(max-width:420px){.cards{grid-template-columns:1fr}.chain-grid{grid-template-columns:1fr}.plant{padding:10px}.plant-scene{height:230px}.crane{transform:translateX(-50%) scale(.82)}.ladle{transform:translateX(-50%) scale(.82)}.mission h2{font-size:22px}.btn{padding:8px 9px}}
+.heat-picker{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}.heat-picker select{max-width:240px;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:5px 7px;color:var(--ink)}
+</style>
+<style>
+.status-pill.blue{background:var(--blue-soft);color:var(--blue)}
+.llm-decision{margin-top:14px;padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}
+.llm-decision.active{border-color:#8db1eb;background:var(--blue-soft)}
+.llm-decision.muted{opacity:.72}
+.llm-decision-head{display:flex;justify-content:space-between;gap:8px;font-size:11px}
+.llm-decision-head span{font-weight:800}.llm-decision-head b{color:var(--blue);font-family:var(--mono)}
+.llm-decision p{margin:7px 0 0;color:var(--muted);font-size:10px}
+.llm-assignments{display:grid;gap:6px;margin-top:9px}
+.llm-assignment{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+.llm-assignment b{font:700 10px var(--mono);overflow-wrap:anywhere}.llm-assignment span{font:700 10px var(--mono);color:var(--blue)}
+.llm-assignment em{grid-column:1/-1;color:var(--muted);font-size:9px;font-style:normal}
+.compact-hide{display:none!important}
+.mission{grid-template-columns:1fr auto;align-items:end;padding:20px 0 16px}.mission h2{margin:0;font-size:26px}.mission-note{min-width:300px}
+.phase-line{justify-content:flex-start}.plant{min-height:0}.side-panel{display:flex;flex-direction:column;align-items:flex-start}.metric-list{width:100%}
+.chain-node{min-height:54px;display:flex;align-items:center}.chain-node:not(:last-child):after{top:17px}
+.cards{grid-template-columns:repeat(auto-fill,minmax(220px,320px))}.scene-card{min-height:78px}.scene-card .card-meta{margin-top:4px}.scene-card .card-result{margin-top:6px}.scene-card .card-source{display:none}
+.llm-assignment em{display:none}.footer{justify-content:flex-start}
+.heat-band .heat-dot.window,.heat-band .heat-dot.affected,.heat-band .heat-dot.resolved{z-index:2}
+@media(max-width:680px){.mission{grid-template-columns:1fr}.mission-note{min-width:0}.mission h2{font-size:22px}.stage-grid{gap:12px}.chain-node{min-height:50px}}
 </style>
 </head>
 <body>
-<main class="wrap">
-<header class="hdr">
-<div class="hdr-left">
-<div class="hdr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/><path d="M2 7l10 5 10-5"/><path d="M12 22V12"/></svg></div>
-<div><h1>钢包局部重调度决策流程</h1><p>180 分钟预配窗口 · 90 秒安全缓冲 · 决策树优先 · LLM 兜底</p></div>
-</div>
-<span class="pill pill-live">交互演示</span>
-</header>
+<main class="app" id="app">
+<header class="topbar"><div class="brand"><div class="mark">包</div><div><h1>Codex 钢包局部重调度</h1><p class="compact-hide">决策树失败后由 Codex 接管事故窗口</p></div></div><span class="source-badge">真实 PLAN / CRANE</span></header>
+<nav class="tabs" aria-label="主视图"><button class="tab" data-tab="tour" aria-selected="true">Codex 演示</button><button class="tab" data-tab="data" aria-selected="false">Codex 实验</button><button class="tab" data-tab="scenes" aria-selected="false">Codex 场景</button></nav>
 
-<!-- CONTROLS -->
-<section class="ctl" aria-label="演示条件">
-<div class="ctl-grp">
-<span class="ctl-lbl">响应路径</span>
-<div class="route-tabs" id="routeTabs" role="group">
-<button type="button" data-route="tree" aria-pressed="true"><span class="dot dot-green"></span>决策树成功</button>
-<button type="button" data-route="llm" aria-pressed="false"><span class="dot dot-blue"></span>LLM 兜底</button>
-<button type="button" data-route="manual" aria-pressed="false"><span class="dot dot-red"></span>人工复核</button>
-</div>
-</div>
-<div class="ctl-grp">
-<span class="ctl-lbl">扰动类型</span>
-<select id="disturbance">
-<option>行车不可用</option>
-<option>钢包不可用</option>
-<option>设施不可用</option>
-<option>计划偏差</option>
-</select>
-</div>
-<div class="tc">
-<div class="tc-row"><span class="ctl-lbl">距离最早开浇</span><span class="tc-val" id="timeVal">7 分 00 秒</span></div>
-<input id="timeToPour" type="range" min="0" max="10800" step="30" value="420">
-<div class="tc-scale"><span>0s</span><span>90s 缓冲</span><span>180min</span></div>
-</div>
+<section class="view active" id="tourView">
+<div class="mission"><div><h2>事故后，<em>Codex 完成局部重排</em></h2><p class="compact-hide">457 炉先完成基线；11:00 只打开未来 20 分钟的 31 炉窗口。</p></div><div class="mission-note"><b>当前路径</b><span id="missionFocus">行车 2500 离线 → 决策树 30/31 → Codex 31/31</span></div></div>
+<div class="toolbar"><button class="btn primary" id="playBtn">▶ 开始演示</button><button class="btn" id="pauseBtn">Ⅱ 暂停</button><button class="btn" id="prevBtn">‹ 上一步</button><button class="btn" id="nextBtn">下一步 ›</button><button class="btn ghost" id="resetBtn">↺ 重置</button><span id="runLabel" class="status-pill green">准备就绪</span></div>
+<section class="timebox" aria-label="10点到20点总时间条"><div class="time-head"><strong>生产时间 · 10:00–20:00</strong><span class="time-now" id="timeNow">10:00</span></div><input class="range" id="timeRange" type="range" min="0" max="600" value="0" step="0.01" aria-label="演示时间"><div class="time-rail"><div class="time-track"></div><div class="time-progress" id="timeProgress"></div><div class="time-marker" id="eventMarker"><span>事故 11:00</span></div></div><div class="ticks"><span>10:00</span><span>20:00</span></div><div class="phase-line"><b id="phaseTitle">阶段 1 · 全量预配</b><span class="compact-hide" id="phaseCopy">生产尚未开始，决策树准备 457 炉基线</span></div></section>
+<div class="stage-grid"><section class="plant"><div class="panel-head"><h3>生产线状态</h3><span id="plantMeta">预配尚未执行</span></div><div class="plant-scene" id="plantScene"><span class="track-label">CRANE 位置</span><div class="roof"></div><div class="crane" data-crane="2500" style="left:12%"><div class="bridge"></div><div class="leg left"></div><div class="leg right"></div><div class="hook"></div><span class="fire">🔥</span><span class="smoke">♨</span><small>2500</small></div><div class="crane" data-crane="3170" style="left:43%"><div class="bridge"></div><div class="leg left"></div><div class="leg right"></div><div class="hook"></div><span class="fire">🔥</span><span class="smoke">♨</span><small>3170</small></div><div class="crane" data-crane="4170" style="left:74%"><div class="bridge"></div><div class="leg left"></div><div class="leg right"></div><div class="hook"></div><span class="fire">🔥</span><span class="smoke">♨</span><small>4170</small></div><div class="station" style="left:21%">转炉区</div><div class="station" style="left:51%">精炼区</div><div class="station" style="left:81%">浇注区</div><div class="ladle" id="sceneLadle" style="left:12%"><small id="sceneLadleLabel">ST07</small></div><div class="heat-strip"></div><div id="heatDots"></div></div><div class="scene-caption"><span class="compact-hide" id="sceneCaption">点击开始：决策树批量预配 457 炉</span><b id="sceneState">未启动</b></div></section><aside class="side-panel"><span class="compact-hide status-kicker" id="statusKicker">系统状态</span><div class="status-title" id="statusTitle">等待开始</div><p class="compact-hide status-copy" id="statusCopy">观众将先看到全量预配，再进入事故时刻。</p><span class="status-pill green" id="statusPill">READY</span><div class="llm-decision" id="llmDecision"><div class="llm-decision-head"><span>Codex 结果</span><b id="llmDecisionStatus">等待调用</b></div><p id="llmDecisionIntro">决策树失败后调用；结果须通过硬约束校验。</p><div class="llm-assignments" id="llmAssignments"></div></div><div class="metric-list"><div class="metric-row"><span>基线预配</span><b id="baselineMetric">0 / 457</b></div><div class="metric-row"><span>事故窗口</span><b id="windowMetric">未打开</b></div><div class="metric-row"><span>Codex 分配</span><b id="lockedMetric">待调用</b></div><div class="metric-row compact-hide"><span>人工假设耗时</span><b id="humanMetric">90s</b></div></div></aside></div>
+<section class="chain"><h3>响应链</h3><div class="chain-grid"><div class="chain-node" id="chainTree"><small class="compact-hide">01</small><b>决策树</b><p class="compact-hide">局部重排</p></div><div class="chain-node" id="chainContext"><small class="compact-hide">02</small><b>局部上下文</b><p class="compact-hide">受影响炉次 + 可用资源</p></div><div class="chain-node" id="chainLlm"><small class="compact-hide">03</small><b>Codex</b><p class="compact-hide">局部组合</p></div><div class="chain-node" id="chainCheck"><small class="compact-hide">04</small><b>校验下发</b><p class="compact-hide">失败则人工</p></div></div></section>
+<section class="scene-section"><div class="panel"><div class="panel-head"><h3>已审计 Codex 场景</h3><span>仅显示决策树失败案例</span></div><div class="cards" id="tourCards"></div></div></section>
+<div class="sim-grid scene-section"><section class="panel"><div class="panel-head"><h3>人工对照</h3><span>模拟</span></div><p class="api-note compact-hide">拖动人工处理时间，查看剩余预算。</p><div class="control-line"><label for="humanRange">处理时间</label><input id="humanRange" type="range" min="30" max="300" value="90" step="10"><output id="humanOutput">90s</output></div><div class="metric-row"><span>Codex 预算</span><b class="good">410s</b></div><div class="metric-row"><span>人工剩余</span><b id="humanRemain">320s</b></div></section><section class="panel"><div class="panel-head"><h3>实时接口</h3><span>未收录场景</span></div><p class="api-note compact-hide">本地后端：决策树失败后请求 LLM。</p><button class="btn" id="liveBtn">运行实时模拟</button><div class="api-status" id="apiStatus">尚未请求 · API Key 仅由后端读取</div></section></div>
 </section>
 
-<!-- STATUS -->
-<section class="statusbar" aria-live="polite">
-<div class="sb-left">
-<div class="sb-icon ok" id="sbIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
-<div><div class="sb-title" id="sbTitle">决策树局部重排成功</div><div class="sb-sub" id="sbSub">受影响炉次完成重新分配，LLM 未触发</div></div>
-</div>
-<div class="sb-budget pos" id="sbBudget">预算 330s</div>
-</section>
+<section class="view" id="dataView"><div class="mission"><div><h2>Codex 真实数据实验</h2><p class="compact-hide">点击炉次点，查看完整审计字段。</p></div><div class="mission-note"><b>数据口径</b><span>PLAN 469 · 评测 457 · 窗口 31 炉 · CRANE 1,048,570 行</span></div></div><div class="stats" id="dataStats"></div><section class="panel"><div class="panel-head"><h3>457 炉基线</h3><span>11:00–11:20 窗口展开</span></div><div class="heat-band" id="dataBand"></div><div class="band-axis"><span>10:00</span><span>11:00</span><span>15:00</span><span>20:00</span></div><div class="scene-caption"><span><b>绿色</b> 基线 / <b>红色</b> 冲突 / <b>蓝色</b> Codex 改配</span><span>点击任意炉次查看真实字段</span></div></section><section class="evidence-layout"><section class="panel"><div class="panel-head"><h3>Codex 审计结果</h3><span id="auditResultLabel">31 / 31 校验通过</span></div><div id="replayTable"></div></section><section class="panel detail" id="heatDetail"><h3>炉次审计详情</h3><p class="detail-empty">点击炉次。</p></section></section></section>
 
-<!-- STAGE -->
-<section class="stage">
-<div class="tl">
-<div class="tl-hd"><h2>预配时间轴</h2><span>180 分钟窗口 · 90 秒安全缓冲</span></div>
-<div class="tl-rail" role="img" aria-label="预配时间轴">
-<div class="tl-bar"></div><div class="tl-fill" id="tlFill" style="width:96%"></div><div class="tl-safe"></div>
-<div class="tl-evt" id="tlEvt" style="left:96%"><div class="tl-evt-lbl" id="tlEvtLbl">行车不可用</div><div class="tl-evt-bar"></div></div>
-</div>
-<div class="tl-ticks"><span class="tl-tk">−180 min</span><span class="tl-tk">−90 min</span><span class="tl-tk red">−90s</span><span class="tl-tk">开浇</span></div>
-<div class="tl-legend">
-<div><span class="lg-bar g"></span><b>180 分钟</b> 预配窗口 — 炉次进入开吹前的可调配区间</div>
-<div><span class="lg-bar r"></span><b>90 秒</b> 安全缓冲 — 预算耗尽后不再尝试 LLM</div>
-</div>
-</div>
-<div class="steps">
-<div class="steps-hd"><h2>实际执行路径</h2><code id="formula">420 − 90 = 330s 可用预算</code></div>
-<div class="slist" id="slist">
-<div class="s-item s-done" data-step="preallocate"><div class="s-num">1</div><div class="s-body"><h3>滑窗预配</h3><p>炉次进入开吹前 180 分钟窗口，按优先级排序后逐批触发预配</p><div class="s-detail">ordered_by: -priority, window_start, heat_id</div></div><span class="s-tag">已预配</span></div>
-<div class="s-item s-done" data-step="event"><div class="s-num">2</div><div class="s-body"><h3 id="evtTitle">行车不可用</h3><p>计算影响范围，排除已锁定炉次（locked 不进入候选集）</p><div class="s-detail" id="evtDetail">affected: H-206, H-207 | locked: H-203</div></div><span class="s-tag" id="evtTag">2 条受影响</span></div>
-<div class="s-item s-done" data-step="tree"><div class="s-num">3</div><div class="s-body"><h3>决策树局部重排</h3><p>逐炉次：钢包规则 → 行车载重/位置/时间窗/安全间距 → 打分排序 → 硬约束终检</p><div class="s-detail">v2 | weights: grade=0.50, age=0.20, window=0.15, balance=0.10, scarcity=0.05</div></div><span class="s-tag" id="treeTag">方案可行</span></div>
-<div class="s-item s-muted" data-step="budget"><div class="s-num">4</div><div class="s-body"><h3>安全预算检查</h3><p>earliest_pour_at − occurred_at − 90s。预算 ≤ 0 禁止 LLM</p><div class="s-detail" id="budgetDetail">budget = 420 − 90 = 330s</div></div><span class="s-tag" id="budgetTag">无需检查</span></div>
-<div class="s-item s-muted" data-step="llm"><div class="s-num">5</div><div class="s-body"><h3>LLM ReAct 兜底</h3><p>ReAct 循环：提议 → 校验 → 反馈 → 修正。最多 5 轮，预算耗尽终止</p><div class="s-detail" id="llmDetail">deepseek-v4-flash | max_rounds: 5 | validate_assignment + evaluate_ladle_rules</div></div><span class="s-tag" id="llmTag">未调用</span></div>
-<div class="s-item s-done" data-step="outcome"><div class="s-num">6</div><div class="s-body"><h3 id="outTitle">采用决策树结果</h3><p id="outText">通过 validate_output 终检后写入审计，钢包即时释放供下炉复用</p><div class="s-detail" id="outDetail">action: assign → audit → ladle immediate_release</div></div><span class="s-tag" id="outTag">完成</span></div>
-</div>
-</div>
-<div class="scope">
-<div class="scope-hd">本次影响范围 — 只重排未锁定炉次</div>
-<div class="heat-row">
-<span class="heat resolved" id="heat1"><i></i>H-206 已重排</span>
-<span class="heat resolved" id="heat2"><i></i>H-207 已重排</span>
-<span class="heat locked"><i></i>H-203 locked · 保持原分配</span>
-</div>
-<p class="scope-note" id="scopeNote">locked 炉次不进入候选集；frozen_assignments 保留未受影响的基线分配</p>
-</div>
-<div class="constraints">
-<h3>硬约束校验清单（决策树与 LLM 共用）</h3>
-<div class="cstr-grid">
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>钢包状态：非 offline/maintenance/scrapped</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>等级匹配：grade_matches(required, actual)</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>行车载重：load + weight ≤ max_load</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>运行区间：limit_0 ≤ position ≤ limit_1</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>时间窗：arrival ≤ window_end</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>安全间距：|pos_a − pos_b| ≥ safe_distance</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>氩气：LF/LATS 检查 argon_north/south</div>
-<div class="cstr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>包龄：age ≤ max_age</div>
-</div>
-</div>
-</section>
-
-<section class="rules">
-<article class="hl"><h3>决策树永远先执行</h3><p>决策树是生产主路径（毫秒级）。只要能生成合规方案，不会调用 LLM。LLM 只在决策树搞不定的困难场景中顶上。</p></article>
-<article><h3>LLM 不是放宽约束</h3><p>LLM 输出必须通过 validate_output 同一套硬约束终检。缺失、重复、超时或违反约束均被拒绝。</p></article>
-<article><h3>90 秒内转人工</h3><p>预算 ≤ 0 禁止 LLM，返回 Frozen + human_review_required。Frozen 不改写锁定炉次，原地硬扛等人工。</p></article>
-</section>
-
-<footer class="ftr">
-<span>交互演示 · 不调用模型或生产接口 · 规则来自 TieredResponseController + inject_disturbance</span>
-<code>budget = earliest_pour_at − occurred_at − 90s</code>
-</footer>
+<section class="view" id="scenesView"><div class="mission"><div><h2>Codex 事故场景</h2><p class="compact-hide">只展示决策树不完整并进入 Codex 的受控扰动。</p></div><div class="mission-note"><b>场景规则</b><span>决策树失败后才调用 Codex</span></div></div><div class="cards" id="allCards"></div><section class="panel compare"><div class="panel-head"><h3>Codex 接管效果</h3><span>当前场景审计</span></div><table class="compare-table"><thead><tr><th>阶段</th><th>结果</th><th>作用</th><th>口径</th></tr></thead><tbody><tr><td>决策树失败</td><td id="compareDt">30/31</td><td>触发 Codex</td><td>真实窗口受控压力测试</td></tr><tr><td>Codex 接管</td><td class="good" id="compareLlm">31/31</td><td>补足局部组合</td><td>硬约束审计通过</td></tr></tbody></table></section></section>
+<footer class="footer"><span>真实来源：PLAN(1).xlsx / CRANE.xlsx · outputs/demo_catalog.json</span><span class="compact-hide">锁定规则：到达 pour_at 后不可重排</span></footer>
 </main>
 <script>
 (() => {
-  const state = { route: "tree", seconds: 420, event: "行车不可用" };
   const $ = (id) => document.getElementById(id);
-  function fmt(sec) { if (sec < 60) return sec + " 秒"; const m = Math.floor(sec/60), s = sec%60; return s ? m+" 分 "+String(s).padStart(2,"0")+" 秒" : m+" 分 00 秒"; }
-  function setStep(n,c) { const e=document.querySelector('.s-item[data-step="'+n+'"]'); if(e) e.className="s-item s-"+c; }
-  const dMap = {
-    "行车不可用": { kind:"crane_offline", a:["H-206","H-207"], l:["H-203"], d:"crane_id removed from remaining_cranes" },
-    "钢包不可用": { kind:"ladle_unavailable", a:["H-205","H-208"], l:["H-203"], d:"ladle_id removed from remaining_ladles" },
-    "设施不可用": { kind:"facility_unavailable", a:["H-204","H-209"], l:["H-203","H-201"], d:"facility matched on refining_route" },
-    "计划偏差": { kind:"schedule_deviation", a:["H-206","H-210"], l:["H-203"], d:"window_start/end/pour_at/blow_at shifted" }
-  };
-  function uH(r,d) { const dm=dMap[d],h1=$("heat1"),h2=$("heat2");
-    if(r==="tree"){h1.className="heat resolved";h1.innerHTML="<i></i>"+dm.a[0]+" 已重排";h2.className="heat resolved";h2.innerHTML="<i></i>"+dm.a[1]+" 已重排";$("scopeNote").textContent="locked 炉次不进入候选集；frozen_assignments 保留未受影响的基线分配";}
-    else if(r==="llm"){h1.className="heat resolved";h1.innerHTML="<i></i>"+dm.a[0]+" LLM 重排";h2.className="heat resolved";h2.innerHTML="<i></i>"+dm.a[1]+" LLM 重排";$("scopeNote").textContent="locked 炉次不进入候选集；frozen_assignments 保留未受影响的基线分配";}
-    else{h1.className="heat affected";h1.innerHTML="<i></i>"+dm.a[0]+" Frozen 硬扛";h2.className="heat affected";h2.innerHTML="<i></i>"+dm.a[1]+" Frozen 硬扛";$("scopeNote").textContent="action=unassigned, ladle_id=null, crane_id=null — 原地硬扛等人工";}
-  }
-  const icons = {
-    ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
-    llm:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>',
-    frozen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-  };
-  function render() {
-    const b=Math.max(0,state.seconds-90), la=b>0, p=Math.max(2,Math.min(98,100-state.seconds/10800*100)), dm=dMap[state.event];
-    $("timeVal").textContent=fmt(state.seconds); $("timeToPour").value=state.seconds;
-    $("tlFill").style.width=p+"%"; $("tlEvt").style.left=p+"%";
-    $("tlEvtLbl").textContent=state.event; $("evtTitle").textContent=state.event;
-    $("formula").textContent=state.seconds+" − 90 = "+b+"s 可用预算";
-    $("sbBudget").textContent="预算 "+b+"s"; $("sbBudget").className="sb-budget "+(la?"pos":"neg");
-    $("evtDetail").textContent="kind: "+dm.kind+" | affected: "+dm.a.join(", ")+" | locked: "+dm.l.join(", ");
-    $("budgetDetail").textContent="budget = "+state.seconds+" − 90 = "+b+"s "+(la?"(>0, LLM 可调用)":"(≤0, 禁止 LLM)");
-    ["preallocate","event","tree","budget","llm","outcome"].forEach(s=>setStep(s,"muted"));
-    setStep("preallocate","done"); setStep("event","done");
-    if(state.route==="tree"){
-      setStep("tree","done");setStep("outcome","done");
-      $("treeTag").textContent="方案可行";$("budgetTag").textContent="无需检查";$("llmTag").textContent="未调用";
-      $("llmDetail").textContent="deepseek-v4-flash | max_rounds: 5 | 状态: 跳过（决策树已解决）";
-      $("outTitle").textContent="采用决策树结果";$("outText").textContent="通过 validate_output 终检后写入审计，钢包即时释放供下炉复用";
-      $("outDetail").textContent="action: assign → audit → ladle immediate_release";$("outTag").textContent="完成";
-      $("sbTitle").textContent="决策树局部重排成功";$("sbSub").textContent="受影响炉次完成重新分配，LLM 未触发";
-      $("sbIcon").className="sb-icon ok";$("sbIcon").innerHTML=icons.ok; uH("tree",state.event);    } else if(state.route==="llm"&&la){
-      setStep("tree","warn");setStep("budget","done");setStep("llm","active");setStep("outcome","done");
-      $("treeTag").textContent="无可行方案";$("budgetTag").textContent=b+"s 可用";$("llmTag").textContent="校验通过";
-      $("llmDetail").textContent="deepseek-v4-flash | max_rounds: 5 | ReAct: propose → validate → accept";
-      $("outTitle").textContent="采用 LLM 方案";$("outText").textContent="完整映射通过 validate_output 硬约束终检后写入审计";
-      $("outDetail").textContent="complete: true → validate_output → action: assign → audit";$("outTag").textContent="兜底成功";
-      $("sbTitle").textContent="LLM ReAct 兜底成功";$("sbSub").textContent="决策树无解，LLM 在安全预算内返回合规方案";
-      $("sbIcon").className="sb-icon llm";$("sbIcon").innerHTML=icons.llm; uH("llm",state.event);
-    } else {
-      setStep("tree","warn");
-      if(la){setStep("budget","done");setStep("llm","fail");$("budgetTag").textContent=b+"s 可用";$("llmTag").textContent="失败";
-        $("llmDetail").textContent="failure: invalid_or_incomplete_llm_proposal | timeout/JSON错误/缺失/重复";
-        $("sbSub").textContent="LLM 输出不可采用，未验证方案不会写入分配";}
-      else{setStep("budget","fail");setStep("llm","muted");$("budgetTag").textContent="预算耗尽";$("llmTag").textContent="禁止调用";
-        $("llmDetail").textContent="remaining_budget ≤ 0 → 直接返回 LLM_REACT_FAILURE";
-        $("sbSub").textContent="决策树失败且预算为 0，直接返回 Frozen";}
-      setStep("outcome","fail");
-      $("outTitle").textContent="Frozen + 人工复核";
-      $("outText").textContent=la?"未获得合规方案，human_review_required=true":"进入 90 秒安全缓冲，不再尝试 LLM";
-      $("outDetail").textContent="path: FROZEN → action: unassigned → ladle/crane: null → 原地硬扛";
-      $("outTag").textContent="需人工";$("sbTitle").textContent="转人工复核";
-      $("sbIcon").className="sb-icon frozen";$("sbIcon").innerHTML=icons.frozen; uH("manual",state.event);
-    }
-  }
-  $("routeTabs").addEventListener("click",e=>{const b=e.target.closest("button[data-route]");if(!b)return;state.route=b.dataset.route;
-    if(state.route==="llm"&&state.seconds<=90)state.seconds=420;
-    if(state.route==="manual"&&state.seconds>90)state.seconds=60;
-    $("routeTabs").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));render();});
-  $("disturbance").addEventListener("change",e=>{state.event=e.target.value;render();});
-  $("timeToPour").addEventListener("input",e=>{state.seconds=Number(e.target.value);
-    if(state.route==="llm"&&state.seconds<=90){state.route="manual";$("routeTabs").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.route==="manual")));}
-    if(state.route==="manual"&&state.seconds>90){state.route="llm";$("routeTabs").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.route==="llm")));}
-    render();});
-  render();
+  const state = { catalog:null, selectedCard:"real_window_1100_1120_codex_stress_001", step:0, playing:false, timer:null, selectedHeat:null };
+  const baseSteps = [
+    {time:0,title:"阶段 1 · 全量预配",copy:"生产尚未开始，决策树准备 457 炉基线",status:"READY",tone:"green"},
+    {time:18,title:"阶段 1 · 批量预配完成",copy:"决策树完成 457/457，进入生产时间轴",status:"BASELINE READY",tone:"green"},
+    {time:48,title:"阶段 2 · 生产推进",copy:"已到 pour_at 的炉次锁定，未来炉次保持可调整",status:"RUNNING",tone:"green"},
+    {time:60,title:"阶段 3 · 11:00 行车离线",copy:"事故只打开未来 20 分钟未锁定的局部窗口",status:"DISTURBANCE",tone:"red"},
+    {time:60.2,title:"阶段 4 · 决策树失败",copy:"局部候选不完整，失败原因返回给下一层",status:"DT FAILED",tone:"amber"},
+    {time:60.42,title:"阶段 5 · 局部上下文提交",copy:"只提交 31 个窗口炉次与当前可用资源",status:"LLM INPUT",tone:"blue"},
+    {time:60.83,title:"阶段 6 · Codex 给出全局映射",copy:"Codex 只改配冲突炉次，其余保持原计划",status:"LLM DECISION",tone:"blue"},
+    {time:61.08,title:"阶段 7 · 校验通过并下发",copy:"完整性、硬约束和场景策略全部通过，演示结束",status:"DISPATCHED",tone:"green"}
+  ];
+  const fallbackCatalog = {source:{plan_total:469,plan_eligible:457,crane_history_rows:1048570,real_crane_ids:["1170","1500","1520","2170","2500","2520","3170","3500","3520","4170"],ladle_count:34},baseline:{total:457,assigned:457,success_rate:1,heats:[]},real_replay:{scenario_count:10,affected_heat_count:1160,dt_success_rate:1,llm_attempted:0,by_kind:[]},cards:[]};
+  async function loadCatalog(){const paths=["/outputs/demo_catalog.json","/frontend/visualization/demo_catalog.json","demo_catalog.json"];for(const path of paths){try{const response=await fetch(path,{cache:"no-store"});if(!response.ok)continue;state.catalog=await response.json();break}catch(error){}}if(!state.catalog){state.catalog=fallbackCatalog;$("apiStatus").textContent="无法读取场景目录";$("apiStatus").className="api-status error"}renderAll()}
+  function codexCards(){return (state.catalog.cards||[]).filter(card=>card.dt_success===false&&card.codex_llm?.success===true)}
+  function cardMarkup(card){return `<button class="scene-card fail ${card.id===state.selectedCard?"selected":""}" data-card="${card.id}"><div class="card-title">${card.title}</div><div class="card-meta">${card.resource_id||""} · ${card.affected||0} 炉</div><div class="card-result">决策树 ${card.dt_assigned||0}/${card.total||0} → Codex ${card.codex_llm?.num_assigned||0}/${card.total||0}</div></button>`}
+  function renderCards(){const cards=codexCards();$("tourCards").innerHTML=cards.map(cardMarkup).join("");$("allCards").innerHTML=cards.map(cardMarkup).join("");document.querySelectorAll("[data-card]").forEach(button=>button.addEventListener("click",()=>selectScenario(button.dataset.card)))}
+  function selectedCard(){const cards=codexCards();return cards.find(card=>card.id===state.selectedCard)||cards[0]}
+  function activeSteps(){return baseSteps}
+  function formatTime(minutes){const total=Math.round(minutes*60);const hour=10+Math.floor(total/3600);const minute=Math.floor((total%3600)/60);const second=total%60;return `${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}${second?`:${String(second).padStart(2,"0")}`:""}`}
+  function renderMetrics(){const base=state.catalog.baseline||{},card=selectedCard()||{},step=activeSteps()[state.step],total=card.total||31,dt=card.dt_assigned||0,llm=card.codex_llm?.num_assigned||0,changes=(card.changed_assignments||[]).length;$("baselineMetric").textContent=state.step<1?"0 / 457":`${base.assigned||457} / ${base.total||457}`;$("windowMetric").textContent=step.time<60?"未打开":step.time>=61.08?`${total} 炉已校验`:`${card.affected||total} 炉 · 11:00–11:20`;$("lockedMetric").textContent=step.time<60.2?"待调用":step.time<60.83?`${dt} / ${total}`:`${llm} / ${total} · 改 ${changes} 炉`;$("lockedMetric").className=step.time>=60.83?"good":"";$("missionFocus").textContent=`行车 ${card.offline_crane_ids?.[0]||"2500"} 离线 → 决策树 ${dt}/${total} → Codex ${llm}/${total}`}
+  function renderTimeline(){const step=activeSteps()[state.step];const time=step.time;$("timeRange").value=time;$("timeNow").textContent=formatTime(time);$("timeProgress").style.width=`${time/600*100}%`;$("phaseTitle").textContent=step.title;$("phaseCopy").textContent=step.copy;$("runLabel").textContent=step.status;$("runLabel").className=`status-pill ${step.tone}`;$("plantMeta").textContent=time<18?"预配尚未执行":time<60?"基线已完成 · 生产推进中":time<61.08?"Codex 响应处理中":"Codex 校验通过 · 演示结束";$("sceneState").textContent=time<18?"未启动":time<60?"457/457 已预配":time<60.2?"扰动发生":time<60.42?"决策树失败":time<60.83?"Codex 分析中":"31/31 已校验";$("sceneCaption").textContent=step.copy;renderMetrics();renderPlant(step);renderLlmDecision(step)}
+  function renderPlant(step){const card=selectedCard()||{},incident=step.time>=60,final=step.time>=61.08,offlineIds=card.offline_crane_ids||["2500"],changed=new Set((card.changed_assignments||[]).map(row=>row.heat_id));document.querySelectorAll(".crane").forEach(el=>{const id=el.dataset.crane;const isOffline=offlineIds.includes(id);el.classList.toggle("offline",incident&&isOffline);el.classList.toggle("fire",incident&&!final&&isOffline)});const windowIds=new Set(card.affected_heat_ids||[]);$("sceneLadle").classList.toggle("hot",incident&&!final);$("sceneLadle").style.left=final?"43%":"12%";$("sceneLadleLabel").textContent=final?`Codex 改 ${changed.size} 炉`:`窗口 ${windowIds.size} 炉`;const dots=(state.catalog.baseline?.heats||[]).filter(heat=>windowIds.has(heat.heat_id));$("heatDots").innerHTML=dots.map(heat=>{const cls=!incident?"window":final?(changed.has(heat.heat_id)?"resolved":"window"):("affected");return `<button class="heat-dot ${cls}" style="left:${Math.max(1,Math.min(99,heat.demo_minute/6))}%" data-heat="${heat.heat_id}" aria-label="查看 ${heat.heat_id}"></button>`}).join("");document.querySelectorAll("[data-heat]").forEach(el=>el.addEventListener("click",()=>showHeat(el.dataset.heat)))}
+  function renderLlmDecision(step){const box=$("llmDecision"),status=$("llmDecisionStatus"),intro=$("llmDecisionIntro"),assignments=$("llmAssignments"),card=selectedCard()||{},total=card.total||31,dt=card.dt_assigned||0,llm=card.codex_llm?.num_assigned||0,rows=card.changed_assignments||[];box.className=`llm-decision ${step.time>=60.83?"active":""}`;if(step.time<60.2){status.textContent="等待调用";intro.textContent="决策树失败后进入 Codex";assignments.innerHTML="";return}if(step.time<60.42){status.textContent=`决策树 ${dt}/${total}`;intro.textContent=`窗口仍有 ${total-dt} 炉未完成`;assignments.innerHTML="";return}if(step.time<60.83){status.textContent="分析中";intro.textContent=`读取 ${total} 炉窗口，搜索最小改配集`;assignments.innerHTML="";return}status.textContent=step.time<61.08?`已生成 ${llm}/${total}`:`校验通过 ${llm}/${total}`;intro.textContent=step.time<61.08?`仅展示实际改配的 ${rows.length} 炉`:`${rows.length} 炉改配，其余 ${total-rows.length} 炉保持原计划`;assignments.innerHTML=rows.map(row=>`<div class="llm-assignment"><b>${row.heat_id}</b><span>${row.old_crane_id||"-"} → ${row.new_crane_id||"-"}</span><em>${row.reason||"局部冲突"}</em></div>`).join("")}
+  function renderChain(){const active=state.step;$("chainTree").className=`chain-node ${active>=4?"fail":active>=1?"done":"active"}`;$("chainContext").className=`chain-node ${active===5?"active":active>5?"done":""}`;$("chainLlm").className=`chain-node ${active===6?"active":active>6?"done":""}`;$("chainCheck").className=`chain-node ${active===7?"active":active>7?"done":""}`}
+  function renderAll(){renderCards();renderTimeline();renderChain();renderData();}
+  function setStep(next){const timeline=activeSteps();state.step=Math.max(0,Math.min(timeline.length-1,next));const step=timeline[state.step];renderTimeline();renderChain();$("statusKicker").textContent=step.time>=120?"生产运行":step.time>=60.2?"Codex 分级响应":"系统状态";$("statusTitle").textContent=step.title.replace(/^阶段 \d+ · /,"");$("statusCopy").textContent=step.copy;$("statusPill").textContent=step.status;$("statusPill").className=`status-pill ${step.tone}`}
+  function play(){if(state.playing)return;state.playing=true;$("playBtn").textContent="▶ 播放中";state.timer=setInterval(()=>{if(state.step>=activeSteps().length-1){pause();return}setStep(state.step+1)},1800)}
+  function pause(){state.playing=false;clearInterval(state.timer);$("playBtn").textContent="▶ 开始演示"}
+  function reset(){pause();setStep(0)}
+  function selectScenario(id){state.selectedCard=id;state.step=0;const card=selectedCard();if(!card)return;renderCards();setStep(0)}
+  function renderData(){const c=state.catalog,s=c.source||{},b=c.baseline||{},card=selectedCard()||{},changes=card.changed_assignments||[],changed=new Set(changes.map(row=>row.heat_id)),windowIds=new Set(card.affected_heat_ids||[]),assignments=card.codex_llm?.assignments||[];$("dataStats").innerHTML=[["真实基线",`${b.assigned||457} / ${b.total||457}`,`${s.plan_eligible||457} 炉纳入评测`],["事故窗口",`${card.affected||31} 炉`,"11:00–11:20，真实时间点"],["Codex 结果",`${card.codex_llm?.num_assigned||31} / ${card.total||31}`,`实际改配 ${changes.length} 炉`]].map(x=>`<div class="stat"><span>${x[0]}</span><b>${x[1]}</b><em>${x[2]}</em></div>`).join("");const heats=b.heats||[];$("dataBand").innerHTML=heats.map((heat,index)=>{const cls=changed.has(heat.heat_id)?"resolved":windowIds.has(heat.heat_id)?"window":heat.action==="assign"?"locked":"affected";const lane=20+(index%4)*16;return `<button class="heat-dot ${cls}" style="left:${Math.max(0,Math.min(100,heat.demo_minute/6))}%;bottom:${lane}px" data-heat="${heat.heat_id}" aria-label="查看 ${heat.heat_id}"></button>`}).join("");document.querySelectorAll("#dataBand [data-heat]").forEach(el=>el.addEventListener("click",()=>showHeat(el.dataset.heat)));const rows=changes.map(row=>`<tr><td>${row.heat_id}</td><td>${row.old_crane_id||"-"} → ${row.new_crane_id||"-"}</td><td>${row.old_ladle_id||"-"} → ${row.new_ladle_id||"-"}</td><td class="good">通过</td></tr>`).join("");$("replayTable").innerHTML=`<div class="table-responsive"><table class="compare-table"><thead><tr><th>实际改配炉次</th><th>行车</th><th>钢包</th><th>校验</th></tr></thead><tbody>${rows||`<tr><td colspan="4">Codex 保持原计划</td></tr>`}</tbody></table></div>`;$("auditResultLabel").textContent=`${card.codex_llm?.num_assigned||31} / ${card.total||31} 校验通过`;$("compareDt").textContent=`${card.dt_assigned||0}/${card.total||31}`;$("compareLlm").textContent=`${card.codex_llm?.num_assigned||31}/${card.total||31}`}
+  function showHeat(id){const heat=(state.catalog.baseline?.heats||[]).find(item=>item.heat_id===id);if(!heat)return;const change=heat.codex_change;state.selectedHeat=id;$("heatDetail").innerHTML=`<h3>${heat.heat_id}</h3><p class="status-pill ${change?"blue":"green"}">${change?"Codex 改配":"基线保持"}</p><details open><summary>炉次信息</summary><dl><dt>炉次编号</dt><dd>${heat.heat_id}</dd><dt>要求等级</dt><dd>${heat.required_grade||"-"}</dd><dt>精炼路径</dt><dd>${heat.refining_route||"-"}</dd><dt>计划真实时间</dt><dd>${heat.pour_at_iso||"-"}</dd></dl></details><details><summary>基线资源</summary><dl><dt>钢包</dt><dd>${heat.ladle_id||"-"}</dd><dt>行车</dt><dd>${heat.crane_id||"-"}</dd><dt>窗口基线行车</dt><dd>${heat.baseline_window_crane_id||"远期计划"}</dd></dl></details>${change?`<details open><summary>Codex 结果</summary><dl><dt>行车</dt><dd>${change.old_crane_id} → ${change.new_crane_id}</dd><dt>钢包</dt><dd>${change.old_ladle_id} → ${change.new_ladle_id}</dd><dt>原因</dt><dd>${change.reason}</dd></dl></details>`:""}<details><summary>校验字段</summary><dl><dt>action</dt><dd>${heat.action||"-"}</dd><dt>violations</dt><dd>${(heat.violations||[]).join(", ")||"none"}</dd></dl></details>`}
+  function humanUpdate(){const value=Number($("humanRange").value);$("humanOutput").textContent=`${value}s`;$("humanMetric").textContent=`${value}s`;$("humanRemain").textContent=`${Math.max(0,410-value)}s`;$("humanRemain").className=Math.max(0,410-value)>90?"good":"bad"}
+  function switchTab(tab){document.querySelectorAll(".tab").forEach(el=>el.setAttribute("aria-selected",String(el.dataset.tab===tab)));document.querySelectorAll(".view").forEach(el=>el.classList.toggle("active",el.id===`${tab}View`))}
+  $("playBtn").addEventListener("click",play);$("pauseBtn").addEventListener("click",pause);$("prevBtn").addEventListener("click",()=>{pause();setStep(state.step-1)});$("nextBtn").addEventListener("click",()=>{pause();setStep(state.step+1)});$("resetBtn").addEventListener("click",reset);$("timeRange").addEventListener("input",e=>{pause();const value=Number(e.target.value);const timeline=activeSteps();const nearest=timeline.reduce((best,item,index)=>Math.abs(item.time-value)<Math.abs(timeline[best].time-value)?index:best,0);setStep(nearest)});$("humanRange").addEventListener("input",humanUpdate);document.querySelectorAll(".tab").forEach(tab=>tab.addEventListener("click",()=>switchTab(tab.dataset.tab)));$("liveBtn").addEventListener("click",async()=>{const status=$("apiStatus");status.className="api-status";status.textContent="正在调用本地实时接口…";try{const response=await fetch("/api/simulate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_id:state.selectedCard,window_minutes:20})});const data=await response.json();if(!response.ok)throw Error(data.error||"接口失败");status.className="api-status ok";status.textContent=`实时结果：${data.path||"已返回"} · ${data.num_assigned||0}/${data.num_total||0}` }catch(error){status.className="api-status error";status.textContent=`实时接口未成功：${error.message}。已保存审计结果仍可正常演示。`}});
+  const heatPicker=document.createElement("div");heatPicker.className="heat-picker";heatPicker.innerHTML='<label for="heatSelect">按编号查看</label><select id="heatSelect"><option value="">选择炉次</option></select>';$('dataBand').after(heatPicker);
+  function syncHeatPicker(){const select=$("heatSelect"),heats=state.catalog.baseline?.heats||[];if(!select||select.options.length===heats.length+1)return;select.innerHTML='<option value="">选择炉次</option>'+heats.map(heat=>`<option value="${heat.heat_id}">${heat.heat_id}${heat.codex_change?" · Codex 改配":""}</option>`).join("")}
+  $("heatSelect").addEventListener("change",event=>{if(event.target.value)showHeat(event.target.value)});new MutationObserver(syncHeatPicker).observe($("dataBand"),{childList:true});
+  humanUpdate();loadCatalog();
 })();
 </script>
 </body>

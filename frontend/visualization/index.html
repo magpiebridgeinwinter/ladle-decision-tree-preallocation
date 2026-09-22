@@ -1,0 +1,1375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>钢包扰动重调度 · 生产事故推演</title>
+<style>
+:root{
+  --bg:#1a1f26;--surface:#232a33;--surface2:#2a323d;--surface3:#313b47;
+  --ink:#e2e8f0;--muted:#8290a0;--line:#3a4451;
+  --blue:#4a8de6;--blue-soft:#1c2f44;--blue-bright:#6aaaff;
+  --green:#22c55e;--green-soft:#16291f;
+  --amber:#f0a830;--amber-soft:#2a2310;
+  --red:#ef4444;--red-soft:#2c1515;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --shadow:0 4px 20px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);color:var(--ink)}body{font:13px/1.5 var(--sans);color:var(--ink);overflow-x:hidden}
+button,input,select{font:inherit;outline:none}
+button{cursor:pointer;color:inherit;border:none;background:none}
+
+/* ── Layout ── */
+.app{max-width:1400px;margin:0 auto;padding:12px 20px 40px}
+@media(max-width:768px){.app{padding:8px 10px 30px}}
+
+/* ── Top Control Bar ── */
+.topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.mark{width:32px;height:32px;border-radius:8px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px}
+.brand h1{font-size:14px;font-weight:700;white-space:nowrap}
+.brand p{font-size:10px;color:var(--muted);white-space:nowrap}
+
+.seg{display:flex;gap:2px;background:var(--surface2);border-radius:8px;padding:2px}
+.seg button{padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;color:var(--muted);transition:all .15s}
+.seg button[aria-selected=true]{background:var(--blue);color:#fff}
+
+.spacer{flex:1}
+
+.search-wrap{position:relative}
+.search-wrap input{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:5px 10px 5px 28px;color:var(--ink);font-size:12px;width:180px}
+.search-wrap input:focus{border-color:var(--blue)}
+.search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);width:14px;height:14px}
+
+.scene-select{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;color:var(--ink);font-size:12px;max-width:220px}
+.scene-select:focus{border-color:var(--blue)}
+
+.err-badge{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700;white-space:nowrap}
+.err-badge.green{background:var(--green-soft);color:var(--green)}
+.err-badge.amber{background:var(--amber-soft);color:var(--amber)}
+.err-badge.red{background:var(--red-soft);color:var(--red)}
+
+@media(max-width:768px){
+  .topbar{gap:8px}
+  .search-wrap input{width:130px}
+  .scene-select{max-width:160px;font-size:11px}
+}
+
+/* ── Time Bar ── */
+.timebar{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-top:12px}
+.timebar-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.timebar-head strong{font-size:13px}
+.time-now{font:700 18px var(--mono);color:var(--blue-bright)}
+.time-controls{display:flex;align-items:center;gap:4px}
+.tbtn{width:30px;height:30px;border-radius:6px;background:var(--surface2);display:grid;place-items:center;color:var(--ink);transition:all .12s}
+.tbtn:hover{background:var(--surface3)}
+.tbtn.play{background:var(--blue);color:#fff}
+.tbtn.play:hover{background:var(--blue-bright)}
+.tbtn svg{width:14px;height:14px}
+
+.time-rail-wrap{position:relative;padding:8px 0 4px}
+.time-rail{position:relative;height:24px}
+.time-track{position:absolute;left:0;right:0;top:8px;height:8px;border-radius:4px;background:var(--surface2)}
+.time-fill{position:absolute;left:0;top:8px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--blue-bright));width:0;transition:width .1s linear}
+.time-thumb{position:absolute;top:4px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--blue);transform:translateX(-50%);cursor:grab;z-index:5;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.time-thumb:active{cursor:grabbing}
+.time-event{position:absolute;top:5px;width:3px;height:14px;border-radius:2px;background:var(--muted);transform:translateX(-50%);cursor:pointer;transition:background .2s}
+.time-event.active{background:var(--amber);height:18px;top:3px}
+.time-event.done{background:var(--green)}
+.time-event:hover{height:18px;top:3px}
+.time-event-label{position:absolute;top:-16px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;color:var(--muted);display:none}
+.time-event.active .time-event-label{display:block;color:var(--amber);font-weight:700}
+
+.time-axis{display:flex;justify-content:space-between;color:var(--muted);font:10px var(--mono);margin-top:4px}
+
+.timebar-phases{display:flex;gap:2px;margin-top:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.phase-tag{flex:0 0 auto;text-align:center;padding:3px 8px;font-size:10px;font-weight:600;color:var(--muted);border-radius:4px;white-space:nowrap}
+.phase-tag.active{background:var(--blue-soft);color:var(--blue-bright)}
+.phase-tag.done{color:var(--green)}
+.phase-tag.fail{color:var(--red)}
+
+/* ── Main Stage Grid ── */
+.stage-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-top:14px}
+@media(max-width:900px){.stage-grid{grid-template-columns:1fr}}
+
+/* ── Plant Animation ── */
+.plant{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.plant-head{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.plant-head h3{font-size:13px;font-weight:700}
+.plant-head .cue-label{font-size:11px;color:var(--muted)}
+.plant-scene{position:relative;height:320px;background:linear-gradient(180deg,#1e2530 0%,#15191f 100%);overflow:hidden}
+@media(max-width:768px){.plant-scene{height:260px}}
+
+/* rails */
+.rail-line{position:absolute;height:3px;background:#475569;left:4%;right:4%}
+.rail-line.top{top:60px}
+.rail-line.bot{top:60px;box-shadow:0 45px 0 #3a4451}
+.rail-label{position:absolute;top:3px;left:10px;color:var(--muted);font-size:9px;font-weight:600}
+
+/* crane */
+.crane{position:absolute;top:42px;width:64px;height:56px;transform:translateX(-50%);transition:left .8s ease,opacity .4s}
+.crane .bridge{height:10px;border-radius:5px;background:#5a6a7a;border:1px solid #3e4d5c}
+.crane .leg{position:absolute;top:9px;width:4px;height:34px;background:#5a6a7a}
+.crane .leg.l{left:6px}.crane .leg.r{right:6px}
+.crane .hook{position:absolute;left:50%;top:9px;width:2px;height:28px;background:#1e2832}
+.crane .hook:after{content:"";position:absolute;bottom:-3px;left:-4px;width:9px;height:6px;border:2px solid #1e2832;border-top:0;border-radius:0 0 5px 5px}
+.crane small{position:absolute;top:40px;left:50%;transform:translateX(-50%);font:700 9px var(--mono);white-space:nowrap;color:var(--muted)}
+.crane.offline{opacity:.3;filter:grayscale(1)}
+.crane.slow .bridge{animation:crane-slow 2.5s linear infinite}
+@keyframes crane-slow{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+.crane.alarm .bridge{background:var(--amber);border-color:var(--amber)}
+.crane.range-block .bridge{background:#6b4f2a}
+
+/* ladle */
+.ladle{position:absolute;bottom:48px;width:30px;height:32px;border:3px solid #5a6a7a;border-top:0;border-radius:0 0 15px 15px;transform:translateX(-50%);background:#6a7888}
+.ladle:before{content:"";position:absolute;left:50%;top:-8px;width:2px;height:10px;background:#5a6a7a}
+.ladle small{position:absolute;top:34px;left:50%;transform:translateX(-50%);white-space:nowrap;font:700 9px var(--mono);color:var(--muted)}
+.ladle.hot{background:#d4882a;border-color:#8a5a14;box-shadow:0 0 16px rgba(212,136,42,.3)}
+.ladle.damaged{background:#5a2828;border-color:var(--red);box-shadow:0 0 12px rgba(239,68,68,.3)}
+.ladle.damaged:after{content:"";position:absolute;top:6px;left:4px;width:10px;height:2px;background:var(--red);transform:rotate(20deg)}
+.ladle.maintenance{opacity:.4;filter:grayscale(.8)}
+
+/* stations */
+.station{position:absolute;bottom:28px;width:72px;height:22px;border-top:3px solid #475569;text-align:center;color:var(--muted);font-size:9px;transform:translateX(-50%)}
+.station.offline{border-color:var(--red);color:var(--red)}
+.station.offline:after{content:" ⏻";font-size:10px}
+.station .st-time{display:block;font:9px var(--mono);color:var(--muted);margin-top:1px}
+
+/* safety barrier */
+.barrier{position:absolute;top:30px;bottom:20px;width:20px;background:repeating-linear-gradient(45deg,var(--amber) 0,var(--amber) 4px,#000 4px,#000 8px);opacity:.5;border-radius:2px}
+
+/* route paths */
+.route-path{position:absolute;bottom:36px;height:2px;border-radius:1px;opacity:.4}
+.route-path.active{opacity:1;box-shadow:0 0 6px currentColor}
+.route-path.closed{opacity:.15;background:var(--red)!important}
+.route-path.closed:after{content:"";position:absolute;left:0;right:0;top:-1px;height:4px;border-top:2px dashed var(--red)}
+
+/* signal indicator */
+.signal-lost{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* clock badge */
+.clock-badge{position:absolute;top:4px;right:8px;font:700 10px var(--mono);color:var(--amber);background:var(--amber-soft);padding:2px 6px;border-radius:4px}
+
+/* plant caption */
+.plant-caption{padding:8px 14px;display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted)}
+.plant-caption b{color:var(--ink)}
+
+/* ── Right Panel: Chain + Numbers ── */
+.side-panel{display:flex;flex-direction:column;gap:14px}
+
+.result-numbers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rnum{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 10px;text-align:center}
+.rnum .label{font-size:10px;color:var(--muted);margin-bottom:4px}
+.rnum .value{font:800 28px var(--mono);line-height:1}
+.rnum .sub{font-size:10px;color:var(--muted);margin-top:3px}
+.rnum.dt .value{color:var(--red)}
+.rnum.llm .value{color:var(--green)}
+.rnum.vl .value{color:var(--blue-bright)}
+.rnum.dt.nollm{opacity:.5}
+.rnum.dt.nollm .value{color:var(--muted)}
+.rnum.llm.nollm{opacity:.4}
+.rnum.llm.nollm .value{color:var(--muted)}
+
+/* chain */
+.chain-box{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.chain-box h3{font-size:13px;font-weight:700;margin-bottom:10px}
+.chain-flow{display:flex;flex-direction:column;gap:6px}
+.chain-step{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:var(--surface2);border:1px solid transparent;transition:all .2s;cursor:pointer}
+.chain-step:hover{border-color:var(--blue)}
+.chain-step.active{background:var(--blue-soft);border-color:var(--blue)}
+.chain-step.done{background:var(--green-soft);border-color:rgba(34,197,94,.3)}
+.chain-step.fail{background:var(--red-soft);border-color:rgba(239,68,68,.3)}
+.chain-step.skip{opacity:.35}
+.chain-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:3px;background:var(--muted)}
+.chain-step.active .chain-dot{background:var(--blue-bright);box-shadow:0 0 6px var(--blue-bright)}
+.chain-step.done .chain-dot{background:var(--green)}
+.chain-step.fail .chain-dot{background:var(--red)}
+.chain-step-content{flex:1;min-width:0}
+.chain-step-title{font-size:12px;font-weight:700}
+.chain-step-desc{font-size:10px;color:var(--muted);margin-top:2px}
+.chain-arrow{width:0;height:0;margin-left:5px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--line)}
+
+/* ── Drawer ── */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+.drawer-overlay.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;right:0;top:0;bottom:0;width:500px;max-width:90vw;background:var(--surface);border-left:1px solid var(--line);z-index:51;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column}
+.drawer.open{transform:translateX(0)}
+.drawer-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.drawer-head h3{font-size:14px;font-weight:700}
+.drawer-close{width:28px;height:28px;border-radius:6px;background:var(--surface2);display:grid;place-items:center}
+.drawer-body{flex:1;overflow-y:auto;padding:14px 16px}
+.drawer-body h4{font-size:12px;color:var(--muted);margin:14px 0 6px;font-weight:700}
+.drawer-body h4:first-child{margin-top:0}
+
+/* 3-column diff view */
+.diff-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px}
+@media(max-width:500px){.diff-grid{grid-template-columns:1fr}}
+.diff-col{background:var(--surface2);border-radius:8px;padding:8px}
+.diff-col h5{font-size:10px;color:var(--muted);margin-bottom:6px;font-weight:700;text-transform:uppercase}
+.diff-col .kv{display:flex;justify-content:space-between;gap:4px;font-size:10px;padding:2px 0}
+.diff-col .kv span{color:var(--muted)}
+.diff-col .kv b{font-family:var(--mono);font-weight:600;text-align:right;overflow-wrap:anywhere}
+.diff-col.changed b{color:var(--amber)}
+.diff-col.llm b{color:var(--green)}
+
+/* assignment table */
+.asg-table{width:100%;border-collapse:collapse;font-size:11px}
+.asg-table th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);color:var(--muted);font-size:10px}
+.asg-table td{padding:6px 4px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:10px}
+.asg-table .action-assign{color:var(--green)}
+.asg-table .action-unassigned{color:var(--red)}
+
+/* validation list */
+.val-list{display:flex;flex-direction:column;gap:4px}
+.val-item{display:flex;align-items:center;gap:6px;font-size:11px;padding:4px 8px;border-radius:6px;background:var(--surface2)}
+.val-item .vi-icon{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:10px;font-weight:700}
+.val-item.pass .vi-icon{background:var(--green-soft);color:var(--green)}
+.val-item.fail .vi-icon{background:var(--red-soft);color:var(--red)}
+.val-item .vi-code{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.val-item .vi-detail{font-size:10px;color:var(--muted);margin-left:auto}
+
+/* ── Bottom Collapsible Sections ── */
+.bottom-sections{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.collapse{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.collapse-head{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.collapse-head h3{font-size:13px;font-weight:700}
+.collapse-head .chev{transition:transform .2s}
+.collapse-head.open .chev{transform:rotate(180deg)}
+.collapse-body{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.collapse-body.open{max-height:2000px}
+.collapse-inner{padding:14px}
+
+/* asset chips */
+.asset-chips{display:flex;flex-wrap:wrap;gap:6px}
+.asset-chip{padding:5px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);font-size:11px;cursor:pointer;transition:all .15s}
+.asset-chip:hover{border-color:var(--blue);background:var(--blue-soft)}
+.asset-chip.disturbed{border-color:var(--red)}
+.asset-chip.replacement{border-color:var(--green)}
+
+/* evidence boundary text */
+.evidence-box{background:var(--surface2);border-left:3px solid var(--amber);padding:12px;border-radius:0 8px 8px 0;font-size:12px;line-height:1.6;color:var(--muted)}
+.evidence-box b{color:var(--ink)}
+
+/* loading / error states */
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)}
+.error-state{background:var(--red-soft);border:1px solid var(--red);border-radius:8px;padding:14px;text-align:center}
+.error-state h3{color:var(--red);font-size:14px;margin-bottom:4px}
+.error-state p{font-size:12px;color:var(--muted)}
+
+/* hidden */
+.hidden{display:none!important}
+
+/* scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Top Control Bar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">钢</div>
+      <div>
+        <h1>钢包扰动重调度</h1>
+        <p>生产事故推演</p>
+      </div>
+    </div>
+    <div class="seg" id="modeSeg">
+      <button aria-selected="true" data-mode="llm">LLM 严重扰动</button>
+      <button aria-selected="false" data-mode="dt">普通局部重排</button>
+    </div>
+    <div class="spacer"></div>
+    <select class="scene-select" id="sceneSelect"></select>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input type="text" id="sceneSearch" placeholder="搜索事故…" />
+    </div>
+    <span class="err-badge green" id="connBadge">已连接</span>
+  </div>
+
+  <!-- Time Bar -->
+  <div class="timebar">
+    <div class="timebar-head">
+      <strong>生产时间轴</strong>
+      <span class="time-now" id="timeNow">10:00</span>
+      <div class="time-controls">
+        <button class="tbtn" id="btnReset" title="复位">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button class="tbtn" id="btnPrev" title="上一步">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button class="tbtn play" id="btnPlay" title="播放/暂停">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="tbtn" id="btnNext" title="下一步">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="time-rail-wrap">
+      <div class="time-rail" id="timeRail">
+        <div class="time-track"></div>
+        <div class="time-fill" id="timeFill"></div>
+        <div class="time-thumb" id="timeThumb"></div>
+      </div>
+      <div class="time-axis"><span>10:00</span><span>12:00</span><span>14:00</span><span>16:00</span><span>18:00</span><span>20:00</span></div>
+    </div>
+    <div class="timebar-phases" id="phaseTags"></div>
+  </div>
+
+  <!-- Main Stage -->
+  <div class="stage-grid">
+    <!-- Plant Animation -->
+    <div class="plant">
+      <div class="plant-head">
+        <h3 id="plantTitle">生产现场</h3>
+        <span class="cue-label" id="plantCue">—</span>
+      </div>
+      <div class="plant-scene" id="plantScene">
+        <div class="rail-line top"></div>
+        <div class="rail-line bot"></div>
+        <span class="rail-label">行车轨道</span>
+        <!-- dynamic content injected here -->
+      </div>
+      <div class="plant-caption">
+        <span>受影响资源: <b id="capAssets">—</b></span>
+        <span>局部窗口: <b id="capWindow">20 min</b></span>
+      </div>
+    </div>
+
+    <!-- Right: 3 Numbers + Chain -->
+    <div class="side-panel">
+      <div class="result-numbers">
+        <div class="rnum dt" id="numDT">
+          <div class="label">决策树完成</div>
+          <div class="value" id="numDTVal">—</div>
+          <div class="sub" id="numDTSub"></div>
+        </div>
+        <div class="rnum llm" id="numLLM">
+          <div class="label">Codex 完成</div>
+          <div class="value" id="numLLMVal">—</div>
+          <div class="sub" id="numLLMSub"></div>
+        </div>
+        <div class="rnum vl" id="numVL">
+          <div class="label">硬约束通过</div>
+          <div class="value" id="numVLVal">—</div>
+          <div class="sub" id="numVLSub"></div>
+        </div>
+      </div>
+      <div class="chain-box">
+        <h3>四阶段响应链</h3>
+        <div class="chain-flow" id="chainFlow">
+          <!-- chain steps injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Collapsible Sections -->
+  <div class="bottom-sections">
+    <div class="collapse" id="colAssets">
+      <div class="collapse-head" onclick="toggleCollapse('colAssets')">
+        <h3>真实资源与逐炉方案</h3>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="collapse-body">
+        <div class="collapse-inner">
+          <div class="asset-chips" id="assetChips"></div>
+          <h4 style="margin:14px 0 6px;font-size:12px;color:var(--muted);font-weight:700">逐炉分配对比</h4>
+          <table class="asg-table" id="asgTable"></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="collapse" id="colValid">
+      <div class="collapse-head" onclick="toggleCollapse('colValid')">
+        <h3>约束验证与审计证据</h3>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="collapse-body">
+        <div class="collapse-inner">
+          <h4 style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px">决策树校验</h4>
+          <div class="val-list" id="valDT"></div>
+          <h4 style="font-size:12px;color:var(--muted);font-weight:700;margin:12px 0 8px" id="valLLMHead">LLM 校验</h4>
+          <div class="val-list" id="valLLM"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="collapse" id="colEvidence">
+      <div class="collapse-head" onclick="toggleCollapse('colEvidence')">
+        <h3>数据与实验说明</h3>
+        <svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="collapse-body">
+        <div class="collapse-inner">
+          <div class="evidence-box" id="evidenceBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading / Error overlay -->
+  <div class="hidden" id="loadingState"><div class="loading">加载场景数据…</div></div>
+  <div class="hidden" id="errorState"><div class="error-state"><h3 id="errTitle">错误</h3><p id="errMsg"></p></div></div>
+</div>
+
+<!-- Drawer -->
+<div class="drawer-overlay" id="drawerOverlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <h3 id="drawerTitle">详情</h3>
+    <button class="drawer-close" id="drawerClose">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const S = {
+  mode: 'llm',            // 'llm' or 'dt'
+  scenarios: [],           // list from API
+  filteredScenarios: [],   // after search filter
+  currentDetail: null,     // full scenario detail
+  playing: false,
+  playTimer: null,
+  currentTime: 0,          // seconds from 10:00 (0 = 10:00)
+  timeRange: 36000,         // 10 hours = 36000 seconds (10:00-20:00)
+  currentEventIdx: -1,      // active event index
+  selectedScenarioId: null,
+};
+
+const TIME_START = 10 * 3600; // 10:00 in seconds from midnight
+
+// Event type labels
+const EVT_LABELS = {
+  preallocation_ready: '预配完成',
+  disturbance_detected: '扰动发生',
+  local_window_opened: '局部窗口',
+  decision_tree_completed: '决策树完成',
+  llm_context_built: 'LLM 上下文',
+  codex_proposal_loaded: 'Codex 方案',
+  hard_constraints_validated: '硬约束终检',
+  dispatch_released: '调度下发',
+};
+
+// Phase definitions for LLM mode
+const LLM_PHASES = [
+  { type:'preallocation_ready', label:'预配完成', desc:'决策树预配包已就绪' },
+  { type:'disturbance_detected', label:'扰动发生', desc:'生产扰动被检测到' },
+  { type:'local_window_opened', label:'局部窗口', desc:'打开20分钟重排窗口' },
+  { type:'decision_tree_completed', label:'决策树', desc:'规则重排尝试' },
+  { type:'llm_context_built', label:'LLM 上下文', desc:'组装局部上下文' },
+  { type:'codex_proposal_loaded', label:'Codex 方案', desc:'候选重排方案' },
+  { type:'hard_constraints_validated', label:'硬约束终检', desc:'统一安全校验' },
+  { type:'dispatch_released', label:'调度下发', desc:'恢复生产' },
+];
+// Phase definitions for DT mode (no LLM)
+const DT_PHASES = [
+  { type:'preallocation_ready', label:'预配完成', desc:'决策树预配包已就绪' },
+  { type:'disturbance_detected', label:'扰动发生', desc:'生产扰动被检测到' },
+  { type:'local_window_opened', label:'局部窗口', desc:'打开20分钟重排窗口' },
+  { type:'decision_tree_completed', label:'决策树', desc:'规则重排成功' },
+  { type:'dispatch_released', label:'调度下发', desc:'直接下发' },
+];
+
+// Visual cue labels
+const CUE_LABELS = {
+  crane_power_off:'行车断电', crane_slow:'行车降速', crane_load_alarm:'载荷报警',
+  crane_range_block:'范围受限', safety_barrier:'通道封锁', ladle_maintenance:'钢包维护',
+  ladle_damage:'钢包损坏', lining_temperature_alarm:'内衬报警', ladle_clock_alarm:'钢包超龄',
+  grade_conflict:'等级冲突', facility_offline:'设施停机', argon_station_alarm:'氩站报警',
+  route_switch:'路线变更', timeline_shift:'时序偏差', converter_delay:'转炉延迟',
+  caster_delay:'连铸延迟', urgent_heat:'紧急插入', priority_up:'优先级提升',
+  telemetry_warning:'遥测陈旧', compound_alarm:'复合扰动',
+};
+
+// Group labels
+const GROUP_LABELS = {
+  equipment:'设备', ladle:'钢包', process_facility:'工艺设施',
+  plan_timing:'计划时序', logistics_safety:'物流安全', data_control:'数据控制', compound:'复合',
+};
+
+// ═══════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════
+async function api(path) {
+  const res = await fetch(path);
+  if (!res.ok) {
+    const body = await res.json().catch(()=>({error:'请求失败'}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+async function init() {
+  try {
+    setBadge('amber','加载中…');
+    const summary = await api('/api/scenarios/summary');
+    const list = await api('/api/scenarios');
+    S.scenarios = list.scenarios || [];
+    S.filteredScenarios = [...S.scenarios];
+    populateSceneSelect();
+    setBadge('green','已连接');
+    // Auto-select first LLM scenario
+    const firstLLM = S.scenarios.find(s=>s.category==='llm_fallback_stress');
+    if (firstLLM) {
+      selectScenario(firstLLM.scenario_id);
+    }
+  } catch(e) {
+    setBadge('red','连接失败');
+    showFatalError('无法加载场景数据', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// SCENARIO SELECTOR
+// ═══════════════════════════════════════════════════
+function populateSceneSelect() {
+  const sel = document.getElementById('sceneSelect');
+  const search = document.getElementById('sceneSearch').value.toLowerCase().trim();
+  const modeScenarios = S.filteredScenarios.filter(s=>{
+    if (S.mode==='llm') return s.category==='llm_fallback_stress';
+    return s.category==='decision_tree_control';
+  }).filter(s=>{
+    if (!search) return true;
+    return s.title.toLowerCase().includes(search) || s.scenario_id.toLowerCase().includes(search);
+  });
+
+  // Group by disturbance_group
+  const groups = {};
+  for (const s of modeScenarios) {
+    const g = s.disturbance_group || 'other';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(s);
+  }
+
+  sel.innerHTML = '';
+  for (const [g, items] of Object.entries(groups)) {
+    const og = document.createElement('optgroup');
+    og.label = GROUP_LABELS[g] || g;
+    for (const s of items) {
+      const o = document.createElement('option');
+      o.value = s.scenario_id;
+      const dtMark = s.decision_tree_success ? '✓' : '✗';
+      o.textContent = `${s.title} [DT ${dtMark}]`;
+      og.appendChild(o);
+    }
+    sel.appendChild(og);
+  }
+
+  if (S.selectedScenarioId) sel.value = S.selectedScenarioId;
+}
+
+function onModeChange(mode) {
+  S.mode = mode;
+  const seg = document.getElementById('modeSeg');
+  seg.querySelectorAll('button').forEach(b=>{
+    b.setAttribute('aria-selected', b.dataset.mode===mode);
+  });
+  // Auto-select first scenario of that mode
+  const first = S.scenarios.find(s=>
+    mode==='llm' ? s.category==='llm_fallback_stress' : s.category==='decision_tree_control'
+  );
+  if (first) selectScenario(first.scenario_id);
+}
+
+async function selectScenario(scenarioId) {
+  S.selectedScenarioId = scenarioId;
+  document.getElementById('sceneSelect').value = scenarioId;
+  resetTime();
+  showLoading(true);
+  try {
+    S.currentDetail = await api(`/api/scenarios/${scenarioId}`);
+    showLoading(false);
+    renderAll();
+  } catch(e) {
+    showLoading(false);
+    showFatalError('场景加载失败', e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// TIME BAR
+// ═══════════════════════════════════════════════════
+function secondsToTime(sec) {
+  const total = TIME_START + sec;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}${s>0?':'+String(s).padStart(2,'0'):''}`;
+}
+
+function getEventOffset(e) { return e.offset_seconds || 0; }
+function getMaxOffset() {
+  if (!S.currentDetail) return 600;
+  const events = S.currentDetail.events || [];
+  if (!events.length) return 600;
+  return Math.max(...events.map(getEventOffset)) + 120; // add 2 min after last event
+}
+
+function updateTimeUI() {
+  const max = getMaxOffset();
+  const pct = Math.min(1, S.currentTime / max);
+  // Fill bar
+  const fill = document.getElementById('timeFill');
+  const thumb = document.getElementById('timeThumb');
+  const rail = document.getElementById('timeRail');
+  const railW = rail.offsetWidth;
+  fill.style.width = (pct * 100) + '%';
+  thumb.style.left = (pct * railW) + 'px';
+
+  // Time display
+  document.getElementById('timeNow').textContent = secondsToTime(S.currentTime);
+
+  // Event markers
+  renderEventMarkers();
+
+  // Active event
+  updateActiveEvent();
+
+  // Phase tags
+  updatePhaseTags();
+
+  // Plant animation
+  updatePlantAnimation();
+
+  // Chain
+  updateChain();
+
+  // Numbers
+  updateNumbers();
+}
+
+function renderEventMarkers() {
+  const rail = document.getElementById('timeRail');
+  const max = getMaxOffset();
+  // Remove old markers
+  rail.querySelectorAll('.time-event').forEach(e=>e.remove());
+  if (!S.currentDetail) return;
+  const events = S.currentDetail.events || [];
+  for (const e of events) {
+    const off = getEventOffset(e);
+    const pct = max > 0 ? off / max : 0;
+    const m = document.createElement('div');
+    m.className = 'time-event';
+    m.style.left = (pct * 100) + '%';
+    m.dataset.seq = e.sequence;
+    m.dataset.type = e.event_type;
+    const lbl = document.createElement('span');
+    lbl.className = 'time-event-label';
+    lbl.textContent = EVT_LABELS[e.event_type] || e.event_type;
+    m.appendChild(lbl);
+    rail.appendChild(m);
+  }
+}
+
+function updateActiveEvent() {
+  if (!S.currentDetail) return;
+  const events = S.currentDetail.events || [];
+  let activeIdx = -1;
+  for (let i=0; i<events.length; i++) {
+    if (S.currentTime >= getEventOffset(events[i])) activeIdx = i;
+  }
+  S.currentEventIdx = activeIdx;
+  const rail = document.getElementById('timeRail');
+  rail.querySelectorAll('.time-event').forEach((m,i)=>{
+    m.classList.toggle('active', i===activeIdx);
+    m.classList.toggle('done', i<activeIdx);
+  });
+}
+
+function updatePhaseTags() {
+  const container = document.getElementById('phaseTags');
+  const phases = S.mode==='llm' ? LLM_PHASES : DT_PHASES;
+  const events = S.currentDetail ? (S.currentDetail.events||[]) : [];
+  container.innerHTML = '';
+  for (const p of phases) {
+    const evt = events.find(e=>e.event_type===p.type);
+    const off = evt ? getEventOffset(evt) : Infinity;
+    const tag = document.createElement('div');
+    tag.className = 'phase-tag';
+    if (S.currentTime >= off) tag.classList.add('active');
+    if (S.currentEventIdx > -1 && evt && S.currentTime >= getEventOffset(events[events.length-1])) tag.classList.add('done');
+    // Fail state for decision_tree
+    if (p.type==='decision_tree_completed' && S.currentDetail && !S.currentDetail.decision_tree_success) {
+      tag.classList.add('fail');
+    }
+    tag.textContent = p.label;
+    container.appendChild(tag);
+  }
+}
+
+function resetTime() {
+  S.currentTime = 0;
+  S.currentEventIdx = -1;
+  stopPlay();
+  updateTimeUI();
+}
+
+function togglePlay() {
+  if (S.playing) stopPlay();
+  else startPlay();
+}
+
+function startPlay() {
+  S.playing = true;
+  document.getElementById('playIcon').innerHTML = '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>';
+  const max = getMaxOffset();
+  if (S.currentTime >= max) S.currentTime = 0;
+  S.playTimer = setInterval(()=>{
+    S.currentTime += 3; // 3 seconds per tick
+    if (S.currentTime >= max) {
+      S.currentTime = max;
+      stopPlay();
+    }
+    updateTimeUI();
+  }, 100);
+}
+
+function stopPlay() {
+  S.playing = false;
+  document.getElementById('playIcon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+  if (S.playTimer) { clearInterval(S.playTimer); S.playTimer = null; }
+}
+
+function stepPrev() {
+  if (!S.currentDetail) return;
+  const events = S.currentDetail.events || [];
+  let target = 0;
+  for (const e of events) {
+    const off = getEventOffset(e);
+    if (off < S.currentTime - 1) target = off;
+  }
+  S.currentTime = target;
+  updateTimeUI();
+}
+
+function stepNext() {
+  if (!S.currentDetail) return;
+  const events = S.currentDetail.events || [];
+  for (const e of events) {
+    const off = getEventOffset(e);
+    if (off > S.currentTime + 1) { S.currentTime = off; updateTimeUI(); return; }
+  }
+  // Go to end
+  S.currentTime = getMaxOffset();
+  updateTimeUI();
+}
+
+// Drag time thumb
+function setupTimeDrag() {
+  const thumb = document.getElementById('timeThumb');
+  const rail = document.getElementById('timeRail');
+  let dragging = false;
+  function onMove(clientX) {
+    if (!dragging) return;
+    const rect = rail.getBoundingClientRect();
+    let pct = (clientX - rect.left) / rect.width;
+    pct = Math.max(0, Math.min(1, pct));
+    S.currentTime = pct * getMaxOffset();
+    updateTimeUI();
+  }
+  thumb.addEventListener('mousedown', e=>{ dragging=true; e.preventDefault(); });
+  document.addEventListener('mousemove', e=>onMove(e.clientX));
+  document.addEventListener('mouseup', ()=>{ dragging=false; });
+  // Touch
+  thumb.addEventListener('touchstart', e=>{ dragging=true; });
+  document.addEventListener('touchmove', e=>{ if(e.touches[0]) onMove(e.touches[0].clientX); });
+  document.addEventListener('touchend', ()=>{ dragging=false; });
+  // Click on rail
+  rail.addEventListener('click', e=>{
+    if (e.target.classList.contains('time-event')) return;
+    const rect = rail.getBoundingClientRect();
+    let pct = (e.clientX - rect.left) / rect.width;
+    pct = Math.max(0, Math.min(1, pct));
+    S.currentTime = pct * getMaxOffset();
+    updateTimeUI();
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER ALL
+// ═══════════════════════════════════════════════════
+function renderAll() {
+  const d = S.currentDetail;
+  if (!d) return;
+
+  // Plant title
+  document.getElementById('plantTitle').textContent = d.title || '生产现场';
+  const cue = d.visual_cue;
+  document.getElementById('plantCue').textContent = cue ? (CUE_LABELS[cue]||cue) : '普通扰动';
+
+  // Caption
+  const heatIds = (d.assets||[]).filter(a=>a.asset_type==='heat').map(a=>a.asset_id);
+  document.getElementById('capAssets').textContent = heatIds.join(', ') || '—';
+  const winMin = Math.round(((d.window_end||0)-(d.window_start||0))/60);
+  document.getElementById('capWindow').textContent = winMin + ' min';
+
+  // Chain
+  renderChain();
+
+  // Numbers
+  renderNumbers();
+
+  // Bottom sections
+  renderAssetsAndAssignments();
+  renderValidations();
+  renderEvidence();
+
+  // Time
+  updateTimeUI();
+}
+
+// ═══════════════════════════════════════════════════
+// CHAIN
+// ═══════════════════════════════════════════════════
+function renderChain() {
+  const d = S.currentDetail;
+  if (!d) return;
+  const container = document.getElementById('chainFlow');
+  container.innerHTML = '';
+  const isLLM = d.category === 'llm_fallback_stress';
+  const phases = isLLM ? LLM_PHASES : DT_PHASES;
+  const events = d.events || [];
+
+  for (let i=0; i<phases.length; i++) {
+    const p = phases[i];
+    const evt = events.find(e=>e.event_type===p.type);
+    const off = evt ? getEventOffset(evt) : Infinity;
+    const step = document.createElement('div');
+    step.className = 'chain-step';
+    if (S.currentTime >= off) step.classList.add('active');
+    if (S.currentTime >= off && i < phases.length-1) {
+      // mark earlier steps done
+      const nextOff = phases[i+1] ? (events.find(e=>e.event_type===phases[i+1].type)?.offset_seconds||Infinity) : Infinity;
+      if (S.currentTime >= nextOff) { step.classList.remove('active'); step.classList.add('done'); }
+    }
+    // Fail state
+    if (p.type==='decision_tree_completed' && !d.decision_tree_success) {
+      step.classList.add('fail');
+      step.classList.remove('done');
+    }
+    if (p.type==='decision_tree_completed' && d.decision_tree_success) {
+      step.classList.add('done');
+    }
+    // Skip LLM phases in DT mode
+    if (!isLLM && ['llm_context_built','codex_proposal_loaded','hard_constraints_validated'].includes(p.type)) {
+      step.classList.add('skip');
+    }
+
+    const dot = document.createElement('div');
+    dot.className = 'chain-dot';
+    const content = document.createElement('div');
+    content.className = 'chain-step-content';
+
+    let title = p.label;
+    let desc = p.desc;
+    // Custom descriptions
+    if (p.type==='decision_tree_completed' && d.responses?.decision_tree) {
+      const dt = d.responses.decision_tree;
+      title = `决策树 ${dt.num_assigned}/${d.affected_heat_count||2}`;
+      desc = dt.success ? '规则重排成功' : dt.reason || '规则重排失败';
+    }
+    if (p.type==='codex_proposal_loaded' && d.responses?.llm) {
+      const llm = d.responses.llm;
+      title = `Codex ${llm.num_assigned}/${d.affected_heat_count||2}`;
+      desc = '生成候选重排方案，经统一硬约束终检后下发';
+    }
+    if (p.type==='hard_constraints_validated' && d.validations?.llm) {
+      const passed = d.validations.llm.filter(v=>v.passed).length;
+      const total = d.validations.llm.length;
+      title = `硬约束 ${passed}/${total}`;
+      desc = '统一安全校验全部通过';
+    }
+
+    content.innerHTML = `<div class="chain-step-title">${title}</div><div class="chain-step-desc">${desc}</div>`;
+    step.appendChild(dot);
+    step.appendChild(content);
+    step.onclick = ()=>openChainDetail(p.type);
+    container.appendChild(step);
+  }
+}
+
+function updateChain() { renderChain(); }
+
+// ═══════════════════════════════════════════════════
+// 3 BIG NUMBERS
+// ═══════════════════════════════════════════════════
+function renderNumbers() {
+  const d = S.currentDetail;
+  if (!d) return;
+  const total = d.affected_heat_count || 2;
+  const isLLM = d.category === 'llm_fallback_stress';
+  const dt = d.responses?.decision_tree;
+  const llm = d.responses?.llm;
+  const dtNum = dt ? dt.num_assigned : 0;
+  const llmNum = llm ? llm.num_assigned : 0;
+  const valLLM = d.validations?.llm || [];
+  const valPassed = valLLM.filter(v=>v.passed).length;
+
+  document.getElementById('numDTVal').textContent = `${dtNum}/${total}`;
+  document.getElementById('numDTSub').textContent = dt ? (dt.success?'成功':'失败') : '—';
+  document.getElementById('numDT').classList.toggle('nollm', !isLLM && dt?.success);
+
+  document.getElementById('numLLMVal').textContent = isLLM ? `${llmNum}/${total}` : '未调用';
+  document.getElementById('numLLMSub').textContent = isLLM ? 'Codex 方案' : '';
+  document.getElementById('numLLM').classList.toggle('nollm', !isLLM);
+
+  if (isLLM) {
+    document.getElementById('numVLVal').textContent = `${valPassed}/${valLLM.length}`;
+    document.getElementById('numVLSub').textContent = '硬约束终检';
+  } else {
+    const valDT = d.validations?.decision_tree || [];
+    const dtpassed = valDT.filter(v=>v.passed).length;
+    document.getElementById('numVLVal').textContent = `${dtpassed}/${valDT.length}`;
+    document.getElementById('numVLSub').textContent = '决策树校验';
+  }
+}
+
+function updateNumbers() { renderNumbers(); }
+
+// ═══════════════════════════════════════════════════
+// PLANT ANIMATION
+// ═══════════════════════════════════════════════════
+function updatePlantAnimation() {
+  const d = S.currentDetail;
+  if (!d) return;
+  const scene = document.getElementById('plantScene');
+  const cue = d.visual_cue;
+  const events = d.events || [];
+  const disturbanceEvt = events.find(e=>e.event_type==='disturbance_detected');
+  const isDisturbed = disturbanceEvt && S.currentTime >= getEventOffset(disturbanceEvt);
+  const dispatchEvt = events.find(e=>e.event_type==='dispatch_released');
+  const isDispatched = dispatchEvt && S.currentTime >= getEventOffset(dispatchEvt);
+
+  // Clear dynamic content
+  scene.querySelectorAll('.dyn').forEach(e=>e.remove());
+
+  // Cranes
+  const cranes = (d.assets||[]).filter(a=>a.asset_type==='crane');
+  const positions = [20, 42, 64, 80];
+  cranes.forEach((c,i)=>{
+    const el = document.createElement('div');
+    el.className = 'dyn crane';
+    el.style.left = positions[i % positions.length] + '%';
+    const sr = c.source_record || {};
+    if (c.role==='disturbed_original' && isDisturbed && !isDispatched) {
+      if (cue==='crane_power_off') el.classList.add('offline');
+      else if (cue==='crane_slow') el.classList.add('slow');
+      else if (cue==='crane_load_alarm') el.classList.add('alarm');
+      else if (cue==='crane_range_block') el.classList.add('range-block');
+    }
+    el.innerHTML = `<div class="bridge"></div><div class="leg l"></div><div class="leg r"></div><div class="hook"></div><small>${c.asset_id}</small>`;
+    el.onclick = ()=>openAssetDetail(c);
+    scene.appendChild(el);
+  });
+
+  // Ladles
+  const ladles = (d.assets||[]).filter(a=>a.asset_type==='ladle');
+  ladles.forEach((l,i)=>{
+    const el = document.createElement('div');
+    el.className = 'dyn ladle';
+    el.style.left = (25 + i*20) + '%';
+    if (l.role==='disturbed_original' && isDisturbed && !isDispatched) {
+      if (cue==='ladle_damage') el.classList.add('damaged');
+      else if (cue==='ladle_maintenance' || cue==='lining_temperature_alarm') el.classList.add('maintenance');
+      else el.classList.add('hot');
+    }
+    el.innerHTML = `<small>${l.asset_id}</small>`;
+    el.onclick = ()=>openAssetDetail(l);
+    scene.appendChild(el);
+  });
+
+  // Stations
+  const routes = (d.assets||[]).filter(a=>a.asset_type==='route');
+  const stationPositions = [15, 35, 55, 75];
+  routes.slice(0,4).forEach((r,i)=>{
+    const el = document.createElement('div');
+    el.className = 'dyn station';
+    el.style.left = stationPositions[i] + '%';
+    if (cue==='facility_offline' && r.role==='baseline_route' && isDisturbed) el.classList.add('offline');
+    if (cue==='argon_station_alarm' && r.role==='baseline_route' && isDisturbed) el.classList.add('offline');
+    el.innerHTML = `${r.asset_id}<span class="st-time">${isDispatched?'✓':'—'}</span>`;
+    scene.appendChild(el);
+  });
+
+  // Safety barrier
+  if (cue==='safety_barrier' && isDisturbed && !isDispatched) {
+    const b = document.createElement('div');
+    b.className = 'dyn barrier';
+    b.style.left = '45%';
+    scene.appendChild(b);
+  }
+
+  // Clock badge for timing scenarios
+  if ((cue==='ladle_clock_alarm' || cue==='converter_delay' || cue==='caster_delay' || cue==='timeline_shift') && isDisturbed && !isDispatched) {
+    const clk = document.createElement('div');
+    clk.className = 'dyn clock-badge';
+    clk.textContent = '⏱ 延迟';
+    scene.appendChild(clk);
+  }
+
+  // Signal lost for telemetry
+  if (cue==='telemetry_warning' && isDisturbed && !isDispatched) {
+    const sig = document.createElement('div');
+    sig.className = 'dyn signal-lost';
+    sig.textContent = '📡';
+    scene.appendChild(sig);
+  }
+
+  // Urgent heat badge
+  if ((cue==='urgent_heat' || cue==='priority_up') && isDisturbed) {
+    const u = document.createElement('div');
+    u.className = 'dyn clock-badge';
+    u.style.color = 'var(--red)';
+    u.style.background = 'var(--red-soft)';
+    u.textContent = '⚠ 紧急';
+    scene.appendChild(u);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// ASSETS & ASSIGNMENTS
+// ═══════════════════════════════════════════════════
+function renderAssetsAndAssignments() {
+  const d = S.currentDetail;
+  if (!d) return;
+
+  // Asset chips
+  const chips = document.getElementById('assetChips');
+  chips.innerHTML = '';
+  for (const a of (d.assets||[])) {
+    const chip = document.createElement('div');
+    chip.className = 'asset-chip ' + (a.role==='disturbed_original'?'disturbed':a.role==='replacement_candidate'?'replacement':'');
+    chip.textContent = `${a.asset_type==='heat'?'炉次':a.asset_type==='crane'?'行车':a.asset_type==='ladle'?'钢包':'路线'} ${a.asset_id}`;
+    chip.onclick = ()=>openAssetDetail(a);
+    chips.appendChild(chip);
+  }
+
+  // Assignment table
+  const tbl = document.getElementById('asgTable');
+  const dtAssignments = d.responses?.decision_tree?.assignments || [];
+  const llmAssignments = d.responses?.llm?.assignments || [];
+  const isLLM = d.category === 'llm_fallback_stress';
+
+  let html = '<thead><tr><th>炉次</th>';
+  if (isLLM) html += '<th>决策树</th><th>Codex</th>';
+  else html += '<th>决策树</th>';
+  html += '</tr></thead><tbody>';
+
+  const allHeatIds = [...new Set([...dtAssignments, ...llmAssignments].map(a=>a.heat_id))];
+  for (const hid of allHeatIds) {
+    const dtA = dtAssignments.find(a=>a.heat_id===hid);
+    const llmA = llmAssignments.find(a=>a.heat_id===hid);
+    html += `<tr><td>${hid}</td>`;
+    if (dtA) {
+      html += `<td class="${dtA.action==='assign'?'action-assign':'action-unassigned'}">${dtA.action==='assign'?`${dtA.ladle_id}/${dtA.crane_id}`:'未分配'}</td>`;
+    } else { html += '<td>—</td>'; }
+    if (isLLM) {
+      if (llmA) {
+        html += `<td class="${llmA.action==='assign'?'action-assign':'action-unassigned'}">${llmA.action==='assign'?`${llmA.ladle_id}/${llmA.crane_id}${llmA.refining_route?' / '+llmA.refining_route.trim():''}`:'未分配'}</td>`;
+      } else { html += '<td>—</td>'; }
+    }
+    html += '</tr>';
+  }
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+// VALIDATIONS
+// ═══════════════════════════════════════════════════
+function renderValidations() {
+  const d = S.currentDetail;
+  if (!d) return;
+  const isLLM = d.category === 'llm_fallback_stress';
+
+  // Decision tree validations
+  const dtVal = d.validations?.decision_tree || [];
+  const dtEl = document.getElementById('valDT');
+  dtEl.innerHTML = dtVal.map(v=>`
+    <div class="val-item ${v.passed?'pass':'fail'}">
+      <div class="vi-icon">${v.passed?'✓':'✗'}</div>
+      <span class="vi-code">${v.check_code}</span>
+      <span class="vi-detail">${v.details ? JSON.stringify(v.details).slice(0,60) : ''}</span>
+    </div>
+  `).join('') || '<span style="color:var(--muted);font-size:11px">无校验记录</span>';
+
+  // LLM validations
+  const llmVal = d.validations?.llm || [];
+  const llmEl = document.getElementById('valLLM');
+  document.getElementById('valLLMHead').style.display = isLLM ? '' : 'none';
+  llmEl.innerHTML = llmVal.map(v=>`
+    <div class="val-item ${v.passed?'pass':'fail'}">
+      <div class="vi-icon">${v.passed?'✓':'✗'}</div>
+      <span class="vi-code">${v.check_code}</span>
+      <span class="vi-detail">${v.details ? JSON.stringify(v.details).slice(0,80) : ''}</span>
+    </div>
+  `).join('') || '<span style="color:var(--muted);font-size:11px">无校验记录</span>';
+}
+
+// ═══════════════════════════════════════════════════
+// EVIDENCE BOUNDARY
+// ═══════════════════════════════════════════════════
+function renderEvidence() {
+  const d = S.currentDetail;
+  if (!d) return;
+  const box = document.getElementById('evidenceBox');
+  const ev = d.audit?.evidence_boundary || '';
+  const extApi = d.audit?.external_api_called;
+  const llmProv = d.audit?.llm_provider || '';
+  const timing = d.audit?.timing_model || '';
+
+  box.innerHTML = `
+    <p style="margin-bottom:8px"><b>证据边界</b><br>${ev}</p>
+    <p style="margin-bottom:6px"><b>数据来源:</b> 炉次、钢包、行车、路线和快照来自 <code>PLAN(1)</code>、<code>CRANE</code> 真实数据审计。</p>
+    <p style="margin-bottom:6px"><b>事故性质:</b> 20 类事故是基于真实资产构造的可复现压力输入，不是宝钢历史事故日志。</p>
+    <p style="margin-bottom:6px"><b>Codex 方案:</b> 离线已保存、已审计方案，<code>external_api_called=${extApi}</code>${llmProv?`，${llmProv}`:''}。</p>
+    <p style="margin-bottom:6px"><b>验证范围:</b> 当前结果验证的是调度输入契约和硬约束闭环，不等于现场 PLC、安全联锁、全局行车碰撞或生产投运验收。</p>
+    <p><b>时序模型:</b> ${timing}</p>
+  `;
+}
+
+// ═══════════════════════════════════════════════════
+// DRAWER
+// ═══════════════════════════════════════════════════
+function openDrawer(title, contentHTML) {
+  document.getElementById('drawerTitle').textContent = title;
+  document.getElementById('drawerBody').innerHTML = contentHTML;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+function openAssetDetail(asset) {
+  const d = S.currentDetail;
+  if (!d) return;
+  const sr = asset.source_record || {};
+  const overrides = d.audit?.controlled_overrides || {};
+  const llmAsgn = (d.responses?.llm?.assignments||[]).find(a=>{
+    if (asset.asset_type==='crane') return a.crane_id===asset.asset_id;
+    if (asset.asset_type==='ladle') return a.ladle_id===asset.asset_id;
+    if (asset.asset_type==='heat') return a.heat_id===asset.asset_id;
+    if (asset.asset_type==='route') return a.refining_route && a.refining_route.trim()===asset.asset_id;
+    return false;
+  });
+
+  let html = '<h4>真实源记录</h4>';
+  html += '<div class="diff-grid"><div class="diff-col"><h5>源字段</h5>';
+  for (const [k,v] of Object.entries(sr)) {
+    html += `<div class="kv"><span>${k}</span><b>${v ?? 'null'}</b></div>`;
+  }
+  html += '</div>';
+
+  // After disturbance state
+  html += '<div class="diff-col changed"><h5>事故后状态</h5>';
+  const ovKeys = Object.keys(overrides);
+  if (asset.role==='disturbed_original') {
+    const co = findControlledOverride(overrides, asset);
+    if (co) {
+      for (const [k,v] of Object.entries(co)) {
+        html += `<div class="kv"><span>${k}</span><b>${JSON.stringify(v)}</b></div>`;
+      }
+    } else {
+      html += '<div class="kv"><span>状态</span><b>已移出候选集</b></div>';
+    }
+  } else if (asset.role==='replacement_candidate') {
+    html += '<div class="kv"><span>状态</span><b>进入候选池</b></div>';
+    if (asset.asset_type==='crane') {
+      html += `<div class="kv"><span>position_m</span><b>${sr.position_m ?? 0}</b></div>`;
+    }
+  } else {
+    html += '<div class="kv"><span>状态</span><b>受影响炉次</b></div>';
+  }
+  html += '</div>';
+
+  // LLM choice
+  html += '<div class="diff-col llm"><h5>Codex 选择</h5>';
+  if (llmAsgn) {
+    html += `<div class="kv"><span>action</span><b>${llmAsgn.action}</b></div>`;
+    if (llmAsgn.ladle_id) html += `<div class="kv"><span>ladle</span><b>${llmAsgn.ladle_id}</b></div>`;
+    if (llmAsgn.crane_id) html += `<div class="kv"><span>crane</span><b>${llmAsgn.crane_id}</b></div>`;
+    if (llmAsgn.refining_route) html += `<div class="kv"><span>route</span><b>${llmAsgn.refining_route.trim()}</b></div>`;
+    html += `<div class="kv"><span>reason</span><b style="font-size:9px">${llmAsgn.reason||''}</b></div>`;
+  } else {
+    html += '<div class="kv"><span>—</span><b>未选用</b></div>';
+  }
+  html += '</div></div>';
+
+  openDrawer(`${asset.asset_type} ${asset.asset_id}`, html);
+}
+
+function findControlledOverride(overrides, asset) {
+  if (!overrides || typeof overrides !== 'object') return null;
+  const co = overrides;
+  if (asset.asset_type==='crane') {
+    const cands = co.candidate_crane_ids || [];
+    if (cands.includes(asset.asset_id)) return { status: 'replacement_candidate' };
+    if (asset.role==='disturbed_original') return { status: 'removed_from_candidates' };
+  }
+  if (asset.asset_type==='ladle') {
+    const cands = co.candidate_ladle_ids || [];
+    if (cands.includes(asset.asset_id)) return { status: 'replacement_candidate' };
+    if (asset.role==='disturbed_original') return { status: co.ladle_override || 'unavailable' };
+  }
+  if (asset.asset_type==='heat') {
+    const ids = co.affected_heat_ids || [];
+    if (ids.includes(asset.asset_id)) return { status: 'affected', window: co.compressed_window || 'normal' };
+  }
+  if (asset.asset_type==='route') {
+    const blocked = co.blocked_route_tokens || [];
+    if (blocked.includes(asset.asset_id)) return { status: 'blocked' };
+    return { status: 'available' };
+  }
+  return null;
+}
+
+function openChainDetail(eventType) {
+  const d = S.currentDetail;
+  if (!d) return;
+  let title = EVT_LABELS[eventType] || eventType;
+  let html = '';
+
+  if (eventType==='decision_tree_completed') {
+    const dt = d.responses?.decision_tree;
+    title = `决策树 ${dt ? dt.num_assigned+'/'+d.affected_heat_count : '—'}`;
+    html = '<h4>决策树路径</h4>';
+    html += `<p style="font-size:12px;color:var(--muted);margin-bottom:10px">${dt?.reason||''}</p>`;
+    html += '<table class="asg-table"><thead><tr><th>炉次</th><th>钢包</th><th>行车</th><th>路线</th><th>动作</th><th>原因</th></tr></thead><tbody>';
+    for (const a of (dt?.assignments||[])) {
+      html += `<tr><td>${a.heat_id}</td><td>${a.ladle_id||'—'}</td><td>${a.crane_id||'—'}</td><td>${a.refining_route?.trim()||'—'}</td><td class="${a.action==='assign'?'action-assign':'action-unassigned'}">${a.action}</td><td style="font-size:9px">${a.reason||''}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    if (dt?.metrics) {
+      html += '<h4>决策指标</h4>';
+      for (const [k,v] of Object.entries(dt.metrics)) {
+        html += `<div class="kv" style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span>${k}</span><b style="font-family:var(--mono)">${v}</b></div>`;
+      }
+    }
+  } else if (eventType==='codex_proposal_loaded' || eventType==='llm_context_built') {
+    const llm = d.responses?.llm;
+    title = `Codex 方案 ${llm ? llm.num_assigned+'/'+d.affected_heat_count : '—'}`;
+    html = '<h4>Codex 全局组合</h4>';
+    html += `<p style="font-size:12px;color:var(--muted);margin-bottom:10px">${llm?.reason||'生成候选重排方案，经统一硬约束终检后下发'}</p>`;
+    html += '<table class="asg-table"><thead><tr><th>炉次</th><th>钢包</th><th>行车</th><th>路线</th><th>动作</th><th>原因</th></tr></thead><tbody>';
+    for (const a of (llm?.assignments||[])) {
+      html += `<tr><td>${a.heat_id}</td><td>${a.ladle_id||'—'}</td><td>${a.crane_id||'—'}</td><td>${a.refining_route?.trim()||'—'}</td><td class="action-assign">${a.action}</td><td style="font-size:9px">${a.reason||''}</td></tr>`;
+    }
+    html += '</tbody></table>';
+  } else if (eventType==='hard_constraints_validated') {
+    title = '硬约束终检';
+    const vals = d.validations?.llm || [];
+    html = '<h4>LLM 校验结果</h4>';
+    html += '<div class="val-list">';
+    for (const v of vals) {
+      html += `<div class="val-item ${v.passed?'pass':'fail'}"><div class="vi-icon">${v.passed?'✓':'✗'}</div><span class="vi-code">${v.check_code}</span><span class="vi-detail">${v.details?JSON.stringify(v.details).slice(0,100):''}</span></div>`;
+    }
+    html += '</div>';
+  } else if (eventType==='disturbance_detected') {
+    title = '扰动发生';
+    const ev = d.audit?.event || {};
+    html = `<h4>扰动信息</h4>`;
+    html += `<p style="font-size:12px;margin-bottom:6px"><b>类型:</b> ${ev.kind||d.disturbance_kind}</p>`;
+    html += `<p style="font-size:12px;margin-bottom:6px"><b>描述:</b> ${ev.description||d.description}</p>`;
+    if (ev.metadata) {
+      html += '<h4>受控参数</h4>';
+      for (const [k,v] of Object.entries(ev.metadata)) {
+        html += `<div class="kv" style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px"><span>${k}</span><b style="font-family:var(--mono);text-align:right;overflow-wrap:anywhere">${JSON.stringify(v)}</b></div>`;
+      }
+    }
+  } else if (eventType==='preallocation_ready') {
+    title = '预配完成';
+    const ci = d.audit?.controlled_inputs || {};
+    html = '<h4>预配基线</h4>';
+    html += '<table class="asg-table"><thead><tr><th>炉次</th><th>钢包</th><th>行车</th><th>路线</th></tr></thead><tbody>';
+    for (const a of (ci.baseline_assignments||[])) {
+      html += `<tr><td>${a.heat_id}</td><td>${a.ladle_id}</td><td>${a.crane_id}</td><td>${a.refining_route?.trim()||'—'}</td></tr>`;
+    }
+    html += '</tbody></table>';
+  } else if (eventType==='local_window_opened') {
+    title = '局部窗口';
+    html = `<h4>二十分钟局部重排窗口</h4>`;
+    html += `<p style="font-size:12px;color:var(--muted)">窗口起点: ${d.window_start}<br>窗口终点: ${d.window_end}<br>时长: ${Math.round(((d.window_end||0)-(d.window_start||0))/60)} 分钟</p>`;
+    const co = d.audit?.controlled_overrides || {};
+    if (co.compressed_window) {
+      html += '<h4>压缩窗口</h4>';
+      html += `<p style="font-size:12px">炉次 ${co.compressed_window.heat_id} 运输窗口压缩至 ${co.compressed_window.seconds} 秒</p>`;
+    }
+  } else if (eventType==='dispatch_released') {
+    title = '调度下发';
+    html = `<h4>恢复生产</h4>`;
+    html += `<p style="font-size:12px;color:var(--muted)">调度方案已通过全部硬约束检查并下发执行。</p>`;
+    const budget = d.audit?.budget_received_seconds;
+    if (budget) html += `<p style="font-size:12px;color:var(--muted)">响应预算: ${budget} 秒</p>`;
+  }
+
+  openDrawer(title, html);
+}
+
+// ═══════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════
+function toggleCollapse(id) {
+  const body = document.querySelector(`#${id} .collapse-body`);
+  const head = document.querySelector(`#${id} .collapse-head`);
+  body.classList.toggle('open');
+  head.classList.toggle('open');
+}
+
+function setBadge(type, text) {
+  const b = document.getElementById('connBadge');
+  b.className = 'err-badge ' + type;
+  b.textContent = text;
+}
+
+function showLoading(show) {
+  document.getElementById('loadingState').classList.toggle('hidden', !show);
+}
+
+function showFatalError(title, msg) {
+  document.getElementById('errorState').classList.remove('hidden');
+  document.getElementById('errTitle').textContent = title;
+  document.getElementById('errMsg').textContent = msg;
+}
+
+// ═══════════════════════════════════════════════════
+// EVENT LISTENERS
+// ═══════════════════════════════════════════════════
+document.getElementById('modeSeg').addEventListener('click', e=>{
+  if (e.target.tagName==='BUTTON') onModeChange(e.target.dataset.mode);
+});
+document.getElementById('sceneSelect').addEventListener('change', e=>{
+  if (e.target.value) selectScenario(e.target.value);
+});
+document.getElementById('sceneSearch').addEventListener('input', populateSceneSelect);
+document.getElementById('btnPlay').addEventListener('click', togglePlay);
+document.getElementById('btnPrev').addEventListener('click', stepPrev);
+document.getElementById('btnNext').addEventListener('click', stepNext);
+document.getElementById('btnReset').addEventListener('click', resetTime);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+document.getElementById('drawerOverlay').addEventListener('click', closeDrawer);
+
+// Init
+setupTimeDrag();
+init();
+</script>
+</body>
+</html>

@@ -13,3 +13,11 @@ outputs/*.xlsx
 outputs/*.csv
 outputs/*.json
 outputs/*.ndjson
+# code-organizer: 生成产物/缓存目录
+outputs/
+dist/
+build/
+*.pyc
+venv/
+node_modules/
+.vscode/

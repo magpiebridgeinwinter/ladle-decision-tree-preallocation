@@ -65,7 +65,11 @@ def _heat(row: dict[str, Any], t0: float) -> dict[str, Any]:
     }
 
 
-def build_ladle_pool(plan_records: list[dict[str, Any]], t0: float) -> list[dict[str, Any]]:
+def build_ladle_pool(
+    plan_records: list[dict[str, Any]],
+    t0: float,
+    location_map: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     ladles: dict[str, dict[str, Any]] = {}
     for row in plan_records:
         ladle_id = row.get("decarb_ladle_id") or row.get("dephos_ladle_id") or row.get("preallocated_ladle")
@@ -78,11 +82,36 @@ def build_ladle_pool(plan_records: list[dict[str, Any]], t0: float) -> list[dict
         decoded = decode_position(row.get("ladle_position"))
         # Prefer the PLAN-embedded coordinate derived from the approved location map.
         # The legacy fallback keeps historical, unmapped PLAN exports readable.
-        position = _number(row.get("mapped_pos_x"), _number(row.get("ladle_position"), 0.0))
+        position_code = decoded["raw"].strip()
+        mapping_status = "legacy_fallback"
+        if location_map is not None:
+            mapped = location_map.get(position_code)
+            if mapped is None:
+                position = None
+                mapping_status = "missing_location_code"
+            elif not mapped.get("position_valid"):
+                position = None
+                mapping_status = "missing_coordinate"
+            else:
+                position = float(mapped["pos_x"])
+                mapping_status = "mapped"
+        else:
+            position = _number(row.get("mapped_pos_x"), _number(row.get("ladle_position"), 0.0))
         empty_weight = _number(row.get("empty_ladle_weight"))
         if empty_weight is not None and empty_weight > 1000:
             empty_weight /= 1000.0
-        ladles[identifier] = {"ladle_id": identifier, "grade": grade, "age_seconds": age, "max_age_seconds": None, "weight_tonnes": empty_weight, "empty_ladle_weight_tonnes": empty_weight, "position_m": position, "position_code": decoded["raw"], "location_mapping_status": row.get("location_mapping_status")}
+        ladles[identifier] = {
+            "ladle_id": identifier,
+            "grade": grade,
+            "age_seconds": age,
+            "max_age_seconds": None,
+            "weight_tonnes": empty_weight,
+            "empty_ladle_weight_tonnes": empty_weight,
+            "position_m": position,
+            "position_code": position_code,
+            "location_mapping_status": mapping_status,
+            "location_metadata": location_map.get(position_code) if location_map is not None else None,
+        }
     return list(ladles.values())
 
 
@@ -135,13 +164,14 @@ def build_scenario_from_real_snapshots(
     plan_records: list[dict[str, Any]],
     crane_snapshots: list[dict[str, Any]],
     limit: int = 1_000_000,
+    location_map: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Build a scenario from pre-filtered PLAN rows and traceable CRANE snapshots."""
     selected = select_pending_heats(plan_records, limit, crane_range=None)
     t0_candidates = [_timestamp(row, "ladle_arrival_at") or _timestamp(row, "tap_finish_at") for row in selected]
     t0 = min((value for value in t0_candidates if value is not None), default=0.0)
     heats = [_heat(row, t0) for row in selected]
-    ladles = build_ladle_pool(plan_records, t0)
+    ladles = build_ladle_pool(plan_records, t0, location_map)
     cranes = []
     for row in crane_snapshots:
         featured = crane_features(row)

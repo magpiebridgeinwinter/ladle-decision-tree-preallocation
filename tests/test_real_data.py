@@ -5,7 +5,14 @@ from tempfile import TemporaryDirectory
 import unittest
 from zipfile import ZipFile
 
+from openpyxl import Workbook
+
+ROOT = Path(__file__).resolve().parents[1]
+
 from ladle_preallocation.real_data.pipeline import filter_plan_records, plan_key
+from ladle_preallocation.real_data.reader import location_mapping_statistics, read_location
+from ladle_preallocation.real_data.audit import LocationAwareAuditError, load_location_aware_audit
+from ladle_preallocation.real_data.scenario import build_scenario_from_real_snapshots
 from ladle_preallocation.real_data.xlsx_stream import iter_crane_rows, read_latest_online_cranes_stream
 
 WORKBOOK = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -46,6 +53,16 @@ def _fixture(path: Path) -> None:
 
 
 class RealDataTests(unittest.TestCase):
+    def test_location_aware_audit_is_required_for_replay(self) -> None:
+        audit = load_location_aware_audit(ROOT / "outputs/real_data_location_aware/decision_tree_audit.json")
+        self.assertEqual(audit["location"]["baseline_contract"], "location-aware-decision-tree-v1")
+        target = next(item for item in audit["scheduling_inputs"]["ladles"] if item["ladle_id"] == "ST38")
+        self.assertEqual(target["position_m"], 17230.0)
+        assignment = next(item for item in audit["assignments"] if item["heat_id"] == "JU6310E7-300770")
+        self.assertEqual((assignment["ladle_id"], assignment["crane_id"]), ("ST36", "4170"))
+        with self.assertRaises(LocationAwareAuditError):
+            load_location_aware_audit(ROOT / "outputs/real_data_validation/decision_tree_audit.json")
+
     def test_stream_reader_keeps_latest_online_snapshot(self) -> None:
         with TemporaryDirectory() as directory:
             path = Path(directory) / "CRANE.xlsx"
@@ -67,6 +84,76 @@ class RealDataTests(unittest.TestCase):
         self.assertEqual(len(included), 2)
         self.assertIn("不在评测月份", excluded["H3::3"])
         self.assertEqual(plan_key(rows[0]), "H1::1")
+
+    def test_location_reader_preserves_real_coordinates_and_metadata(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "loc_location.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Sheet1"
+            sheet.append(["LOC_LOCATION", "SPAN_NAME", "POS_X", "LOC_TYPE", "LOC_STATUS", "GWDMC"])
+            sheet.append(["4QF5", 3, 36075, None, 0, "4#倾翻台"])
+            sheet.append(["2QF5", 3, 17230, None, 0, "2#倾翻台"])
+            workbook.save(path)
+            locations = read_location(path)
+            self.assertEqual(locations["4QF5"]["pos_x"], 36075.0)
+            self.assertEqual(locations["2QF5"]["description"], "2#倾翻台")
+            self.assertTrue(locations["4QF5"]["position_valid"])
+
+    def test_location_reader_rejects_duplicate_codes(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "loc_location.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Sheet1"
+            sheet.append(["LOC_LOCATION", "SPAN_NAME", "POS_X", "LOC_TYPE", "LOC_STATUS", "GWDMC"])
+            sheet.append(["4QF5", 3, 36075, None, 0, "one"])
+            sheet.append(["4QF5", 3, 36076, None, 0, "two"])
+            workbook.save(path)
+            with self.assertRaisesRegex(ValueError, "重复 LOC_LOCATION"):
+                read_location(path)
+
+    def test_location_reader_marks_out_of_range_coordinates_invalid(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "loc_location.xlsx"
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Sheet1"
+            sheet.append(["LOC_LOCATION", "SPAN_NAME", "POS_X", "LOC_TYPE", "LOC_STATUS", "GWDMC"])
+            sheet.append(["BAD", 3, 48001, None, 0, "bad"])
+            workbook.save(path)
+            locations = read_location(path)
+            self.assertFalse(locations["BAD"]["position_valid"])
+            self.assertEqual(locations["BAD"]["position_invalid_reason"], "outside_coordinate_range")
+
+    def test_mapped_position_is_used_and_missing_codes_are_audited(self) -> None:
+        plan = [{
+            "heat_id": "H1", "plan_sequence": 1, "allocation_flag": 1,
+            "required_grade": "0", "decarb_ladle_id": "L1",
+            "current_ladle_grade": "22A", "ladle_position": "4QF5",
+            "empty_ladle_weight": 140000, "tap_finish_at": "2026-03-06-08.00.00",
+            "ladle_arrival_at": "2026-03-06-07.50.00", "ladle_pour_finish_at": None,
+        }, {
+            "heat_id": "H2", "plan_sequence": 2, "allocation_flag": 1,
+            "required_grade": "0", "decarb_ladle_id": "L2",
+            "current_ladle_grade": "22A", "ladle_position": "UNKNOWN",
+            "empty_ladle_weight": 140000, "tap_finish_at": "2026-03-06-08.10.00",
+            "ladle_arrival_at": "2026-03-06-08.00.00", "ladle_pour_finish_at": None,
+        }]
+        locations = {"4QF5": {"location_code": "4QF5", "pos_x": 36075.0, "position_valid": True}}
+        heats, ladles, _ = build_scenario_from_real_snapshots(
+            plan,
+            [{"crane_id": "C1", "position_x": 30000, "online_status": 1, "updated_at": "2026-03-06-08.00.00", "speed_mps": 2, "safe_distance_m": 10, "limit_0_m": 0, "limit_1_m": 48, "weight_tonnes": 0}],
+            location_map=locations,
+        )
+        by_ladle = {row["ladle_id"]: row for row in ladles}
+        self.assertEqual(by_ladle["L1"]["position_m"], 36075.0)
+        self.assertEqual(by_ladle["L1"]["location_mapping_status"], "mapped")
+        self.assertIsNone(by_ladle["L2"]["position_m"])
+        self.assertEqual(by_ladle["L2"]["location_mapping_status"], "missing_location_code")
+        stats = location_mapping_statistics(plan, locations)
+        self.assertEqual(stats["mapped"], 1)
+        self.assertEqual(stats["missing_location_code"], 1)
 
 
 if __name__ == "__main__":

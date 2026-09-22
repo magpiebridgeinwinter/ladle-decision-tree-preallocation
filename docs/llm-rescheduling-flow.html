@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>扰动后的钢包局部重调度闭环</title>
+  <style>
+    :root { color-scheme: light; background: #f5f5f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f5f5; color: #2d3142; font-family: "Songti SC", "STSong", serif; }
+    main { width: min(1600px, 100vw); margin: 0 auto; }
+    svg { display: block; width: 100%; height: auto; }
+    @media (max-width: 900px) {
+      main { min-width: 1120px; }
+      body { overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- The standalone SVG is inlined for screenshot and offline use. -->
+    <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="llm-rescheduling-flow-title llm-rescheduling-flow-desc">
+      <title id="llm-rescheduling-flow-title">扰动后的钢包局部重调度闭环</title>
+      <desc id="llm-rescheduling-flow-desc">真实 31 炉局部窗口中，系统从预配基线出发，先运行决策树，失败后由 Codex 独立生成候选方案，经硬约束终检后恢复生产。</desc>
+      <image href="llm-rescheduling-flow.svg" x="0" y="0" width="1600" height="900" preserveAspectRatio="none"/>
+    </svg>
+  </main>
+</body>
+</html>

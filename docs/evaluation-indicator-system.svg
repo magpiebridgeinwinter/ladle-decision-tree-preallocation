@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="evaluation-indicator-system-title evaluation-indicator-system-desc">
+  <title id="evaluation-indicator-system-title">决策树与 Codex 的评价指标体系</title>
+  <desc id="evaluation-indicator-system-desc">评价先经过可行性门槛，再比较生产效果和计划稳定性，最后输出推荐的局部重排方案。</desc>
+  <defs>
+    <marker id="indicator-arrow" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto"><path d="M0 0 L12 4 L0 8 Z" fill="#4f5d75"/></marker>
+    <marker id="indicator-arrow-accent" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto"><path d="M0 0 L12 4 L0 8 Z" fill="#eb6c36"/></marker>
+    <style>
+      .paper { fill: #f5f5f5; }
+      .eyebrow { font: 600 12px "Songti SC", "STSong", serif; letter-spacing: .16em; fill: #7a8399; }
+      .title { font: 600 32px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .subtitle { font: 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .tag { font: 600 12px "Songti SC", "STSong", serif; letter-spacing: .12em; }
+      .heading { font: 600 20px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .body { font: 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .small { font: 14px "Songti SC", "STSong", serif; fill: #7a8399; }
+      .metric { font: 600 18px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .value { font: 600 26px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .result { font: 600 24px "Songti SC", "STSong", serif; fill: #2d3142; }
+    </style>
+  </defs>
+  <rect width="1600" height="900" class="paper"/>
+
+  <!-- Connectors first. -->
+  <path d="M384 470 H436" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#indicator-arrow)"/>
+  <path d="M764 470 H816" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#indicator-arrow)"/>
+  <path d="M1144 470 H1196" fill="none" stroke="#eb6c36" stroke-width="2.5" marker-end="url(#indicator-arrow-accent)"/>
+
+  <text x="72" y="64" class="eyebrow">钢包调度 · 评价指标体系</text>
+  <text x="72" y="112" class="title">如何选择两种重排方案：先判能不能用，再比谁更好</text>
+  <text x="72" y="148" class="subtitle">所有指标都基于同一预配基线、同一扰动、同一局部窗口和同一终检。</text>
+
+  <g>
+    <rect x="72" y="204" width="312" height="532" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.5"/>
+    <rect x="96" y="228" width="72" height="20" rx="3" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+    <text x="132" y="242" text-anchor="middle" class="tag" fill="#4f5d75">GATE 1</text>
+    <text x="228" y="286" text-anchor="middle" class="heading">可行性门槛</text>
+    <text x="228" y="320" text-anchor="middle" class="body">先判断能否下发</text>
+    <line x1="96" y1="344" x2="360" y2="344" stroke="#7a8399" stroke-width="1"/>
+    <text x="112" y="382" class="metric">完整分配</text><text x="344" y="382" text-anchor="end" class="small">必须满足</text>
+    <text x="112" y="434" class="metric">硬约束违反</text><text x="344" y="434" text-anchor="end" class="value">0</text>
+    <text x="112" y="486" class="metric">资源 / 路线</text><text x="344" y="486" text-anchor="end" class="small">合法</text>
+    <rect x="96" y="536" width="264" height="72" rx="6" fill="#f5f5f5" stroke="#7a8399" stroke-width="1"/>
+    <text x="116" y="566" class="small">决策树</text><text x="344" y="566" text-anchor="end" class="metric">30/31 · 不通过</text>
+    <text x="116" y="594" class="small">Codex</text><text x="344" y="594" text-anchor="end" class="metric">31/31 · 通过</text>
+    <text x="228" y="678" text-anchor="middle" class="body">失败方案不进入优选</text>
+  </g>
+
+  <g>
+    <rect x="436" y="204" width="328" height="532" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.5"/>
+    <rect x="460" y="228" width="72" height="20" rx="3" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+    <text x="496" y="242" text-anchor="middle" class="tag" fill="#4f5d75">GATE 2</text>
+    <text x="600" y="286" text-anchor="middle" class="heading">生产效果</text>
+    <text x="600" y="320" text-anchor="middle" class="body">可行方案再比效果</text>
+    <line x1="460" y1="344" x2="740" y2="344" stroke="#7a8399" stroke-width="1"/>
+    <text x="476" y="382" class="metric">按时率</text><text x="724" y="382" text-anchor="end" class="small">越高越好</text>
+    <text x="476" y="434" class="metric">平均延迟</text><text x="724" y="434" text-anchor="end" class="small">越低越好</text>
+    <text x="476" y="486" class="metric">最大延迟</text><text x="724" y="486" text-anchor="end" class="small">越低越好</text>
+    <rect x="460" y="536" width="280" height="72" rx="6" fill="#f5f5f5" stroke="#7a8399" stroke-width="1"/>
+    <text x="480" y="566" class="small">决策树</text><text x="724" y="566" text-anchor="end" class="metric">96.77% · 2655.6 s</text>
+    <text x="480" y="594" class="small">Codex</text><text x="724" y="594" text-anchor="end" class="metric">100% · 0 s</text>
+    <text x="600" y="678" text-anchor="middle" class="body">优先按时率，再看延迟</text>
+  </g>
+
+  <g>
+    <rect x="816" y="204" width="328" height="532" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.5"/>
+    <rect x="840" y="228" width="72" height="20" rx="3" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+    <text x="876" y="242" text-anchor="middle" class="tag" fill="#4f5d75">GATE 3</text>
+    <text x="980" y="286" text-anchor="middle" class="heading">计划稳定性</text>
+    <text x="980" y="320" text-anchor="middle" class="body">效果接近时再比改动</text>
+    <line x1="840" y1="344" x2="1120" y2="344" stroke="#7a8399" stroke-width="1"/>
+    <text x="856" y="382" class="metric">相对预配基线改配</text><text x="1104" y="382" text-anchor="end" class="small">越少越稳</text>
+    <text x="856" y="434" class="metric">资源负载均衡</text><text x="1104" y="434" text-anchor="end" class="small">次级指标</text>
+    <text x="856" y="486" class="metric">变更原则</text><text x="1104" y="486" text-anchor="end" class="small">只改必要炉次</text>
+    <rect x="840" y="536" width="280" height="72" rx="6" fill="#f5f5f5" stroke="#7a8399" stroke-width="1"/>
+    <text x="860" y="566" class="small">决策树</text><text x="1104" y="566" text-anchor="end" class="metric">29 炉</text>
+    <text x="860" y="594" class="small">Codex</text><text x="1104" y="594" text-anchor="end" class="metric">3 炉 · 28 炉保留预配基线</text>
+    <text x="980" y="678" text-anchor="middle" class="body">效果相近时优先少改动</text>
+  </g>
+
+  <g>
+    <rect x="1196" y="204" width="332" height="532" rx="6" fill="#f5f5f5" stroke="#eb6c36" stroke-width="2"/>
+    <rect x="1220" y="228" width="72" height="20" rx="3" fill="#eb6c36" stroke="#eb6c36" stroke-width="1"/>
+    <text x="1256" y="242" text-anchor="middle" class="tag" fill="#ffffff">OUTPUT</text>
+    <text x="1362" y="286" text-anchor="middle" class="heading">推荐结果</text>
+    <text x="1362" y="320" text-anchor="middle" class="body">把指标变成一个选择</text>
+    <line x1="1220" y1="344" x2="1504" y2="344" stroke="#7a8399" stroke-width="1"/>
+    <text x="1362" y="410" text-anchor="middle" class="result">推荐 Codex 重排</text>
+    <text x="1362" y="458" text-anchor="middle" class="body">决策树少完成 1 炉</text>
+    <text x="1362" y="490" text-anchor="middle" class="body">Codex 补足到 31/31</text>
+    <text x="1362" y="522" text-anchor="middle" class="body">只改 3 炉，规则 0</text>
+    <rect x="1220" y="568" width="284" height="72" rx="6" fill="#ffffff" stroke="#eb6c36" stroke-width="1"/>
+    <text x="1362" y="598" text-anchor="middle" class="small">两方都失败</text>
+    <text x="1362" y="626" text-anchor="middle" class="metric">人工复核</text>
+    <text x="1362" y="690" text-anchor="middle" class="body">不是看模型名气，是看可下发结果</text>
+  </g>
+
+  <text x="410" y="450" text-anchor="middle" class="small">先过门槛</text>
+  <text x="790" y="450" text-anchor="middle" class="small">再比效果</text>
+  <text x="1170" y="450" text-anchor="middle" class="small" fill="#eb6c36">最后推荐</text>
+  <line x1="72" y1="792" x2="1528" y2="792" stroke="#7a8399" stroke-width="1"/>
+  <text x="72" y="824" class="small">真实回放：预配基线 · 11:00–11:20 · 31 炉 · 行车 2500 受控离线</text>
+  <text x="1528" y="824" text-anchor="end" class="small">可行性优先 → 效果优先 → 稳定性优先</text>
+</svg>

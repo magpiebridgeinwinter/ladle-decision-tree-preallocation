@@ -25,6 +25,9 @@ def validate_assignment(
 ) -> list[str]:
     """Return machine-checkable violations for one ladle/crane candidate."""
     errors = list(evaluate_ladle_rules(heat, ladle).violations)
+    if ladle.get("location_mapping_status") in {"missing_location_code", "missing_coordinate"}:
+        errors.append("position_mapping_missing")
+        return errors
     crane_id = str(crane["crane_id"])
     weight = float(ladle.get("weight_tonnes", 0) or 0)
     if crane_loads.get(crane_id, 0) + weight > float(crane.get("max_load_tonnes", 0) or 0):

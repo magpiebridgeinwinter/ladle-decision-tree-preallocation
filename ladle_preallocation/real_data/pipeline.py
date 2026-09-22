@@ -11,13 +11,19 @@ from typing import Any
 from ladle_preallocation.decision_tree import allocate, validate_output
 from ladle_preallocation.decision_tree.config import TREE_VERSION
 from ladle_preallocation.evaluation.metrics import FORMULAS, evaluate
-from ladle_preallocation.real_data.reader import parse_production_time, read_plan
+from ladle_preallocation.real_data.reader import (
+    location_mapping_statistics,
+    parse_production_time,
+    read_location,
+    read_plan,
+)
 from ladle_preallocation.real_data.scenario import build_scenario_from_real_snapshots
 from ladle_preallocation.real_data.xlsx_stream import read_latest_online_cranes_stream
 from ladle_preallocation.real_data.lifecycle import LifecycleManager
 
 DEFAULT_PLAN = Path("data/PLAN(1)_预配包输入.xlsx")
 DEFAULT_CRANE = Path("data/CRANE.xlsx")
+DEFAULT_LOCATION = Path("data/loc_location.xlsx")
 DEFAULT_OUTPUT = Path("outputs")
 
 
@@ -96,17 +102,19 @@ def run_pipeline(
     month: str | None = None,
     sliding_window: bool = False,
     window_minutes: float = 180.0,
+    location_path: Path = DEFAULT_LOCATION,
 ) -> dict[str, Any]:
     """Allocate eligible heats and write the auditable JSON and summary outputs."""
     output_dir.mkdir(parents=True, exist_ok=True)
     plan_records = read_plan(plan_path)
+    location_map = read_location(location_path)
     eligible, excluded, selected_month = filter_plan_records(plan_records, month)
     start_at, end_at = _time_range(eligible)
     snapshots, stream_stats = read_latest_online_cranes_stream(crane_path, start_at, end_at)
     if not snapshots:
         raise RuntimeError("PLAN 时间范围内未找到真实在线行车，停止分配")
 
-    heats, ladles, cranes = build_scenario_from_real_snapshots(eligible, snapshots)
+    heats, ladles, cranes = build_scenario_from_real_snapshots(eligible, snapshots, location_map=location_map)
     snapshot_ids = {str(row["crane_id"]) for row in snapshots}
     if {str(row["crane_id"]) for row in cranes} != snapshot_ids:
         raise RuntimeError("场景行车编号与 CRANE 快照来源不一致")
@@ -179,6 +187,10 @@ def run_pipeline(
         "tree_version": TREE_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "inputs": {"plan": str(plan_path), "crane": str(crane_path)},
+        "location": {
+            "path": str(location_path),
+            "mapping": location_mapping_statistics(eligible, location_map),
+        },
         "selected_month": selected_month,
         "time_range": [
             datetime.fromtimestamp(start_at, timezone.utc).isoformat(),
@@ -224,6 +236,7 @@ def run_pipeline(
         "",
         f"- PLAN：{len(eligible)}/{len(plan_records)} 条纳入评测",
         f"- CRANE：扫描 {stream_stats.source_rows_scanned} 条历史，提取 {len(snapshots)} 台真实在线行车",
+        f"- 位置映射：{len(location_map)} 条字典记录，PLAN 映射统计见审计文件",
         f"- 真实行车编号：{', '.join(sorted(snapshot_ids))}",
         f"- 成功分配：{success}/{len(assignments)}（{success_rate:.2%}）",
         f"- 规则违反：{metrics['规则违反次数']}",
@@ -270,12 +283,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run decision-tree allocation on real PLAN/CRANE data.")
     parser.add_argument("--plan-path", type=Path, default=DEFAULT_PLAN)
     parser.add_argument("--crane-path", type=Path, default=DEFAULT_CRANE)
+    parser.add_argument("--location-path", type=Path, default=DEFAULT_LOCATION)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--month", help="Evaluation month in YYYY-MM; defaults to PLAN dominant month")
     parser.add_argument("--sliding-window", action="store_true", help="Use the 180-minute rolling lifecycle scheduler")
     parser.add_argument("--window-minutes", type=float, default=180.0)
     args = parser.parse_args()
-    print(json.dumps(run_pipeline(args.plan_path, args.crane_path, args.output_dir, args.month, args.sliding_window, args.window_minutes), ensure_ascii=False, indent=2))
+    print(json.dumps(run_pipeline(args.plan_path, args.crane_path, args.output_dir, args.month, args.sliding_window, args.window_minutes, args.location_path), ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,70 @@
+{
+  "categories": [
+    {
+      "category": "decision_tree_control",
+      "count": 1
+    },
+    {
+      "category": "llm_fallback_stress",
+      "count": 20
+    }
+  ],
+  "database": "outputs/offline_scenarios/ladle_scenarios.sqlite3",
+  "disturbance_groups": [
+    {
+      "count": 1,
+      "disturbance_group": "compound"
+    },
+    {
+      "count": 1,
+      "disturbance_group": "data_control"
+    },
+    {
+      "count": 5,
+      "disturbance_group": "equipment"
+    },
+    {
+      "count": 5,
+      "disturbance_group": "ladle"
+    },
+    {
+      "count": 1,
+      "disturbance_group": "logistics_safety"
+    },
+    {
+      "count": 5,
+      "disturbance_group": "plan_timing"
+    },
+    {
+      "count": 3,
+      "disturbance_group": "process_facility"
+    }
+  ],
+  "scenario_count": 21,
+  "scenario_ids": [
+    "decision_tree_control_001",
+    "llm_fallback_001_crane_offline",
+    "llm_fallback_002_crane_speed_degraded",
+    "llm_fallback_003_crane_load_restricted",
+    "llm_fallback_004_crane_range_restricted",
+    "llm_fallback_005_transport_corridor_blocked",
+    "llm_fallback_006_ladle_unavailable",
+    "llm_fallback_007_ladle_damage",
+    "llm_fallback_008_ladle_lining_alarm",
+    "llm_fallback_009_ladle_over_age",
+    "llm_fallback_010_ladle_grade_conflict",
+    "llm_fallback_011_facility_unavailable",
+    "llm_fallback_012_argon_station_unavailable",
+    "llm_fallback_013_refining_route_change",
+    "llm_fallback_014_schedule_deviation",
+    "llm_fallback_015_converter_delay",
+    "llm_fallback_016_caster_delay",
+    "llm_fallback_017_urgent_heat_inserted",
+    "llm_fallback_018_priority_escalation",
+    "llm_fallback_019_crane_telemetry_stale",
+    "llm_fallback_020_compound_disturbance"
+  ],
+  "schema_version": 2,
+  "source_audit": "outputs/real_data_location_aware/decision_tree_audit.json",
+  "verified_llm_fallback_count": 20
+}

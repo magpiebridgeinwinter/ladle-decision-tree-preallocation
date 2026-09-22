@@ -9,10 +9,12 @@ from typing import Any, Iterable
 from openpyxl import load_workbook
 
 from ladle_preallocation.data_modeling.alignment import align_crane_row, align_master_row
+from ladle_preallocation.data_modeling.assumptions import DEFAULT_X_LOWER_LIMIT, DEFAULT_X_UPPER_LIMIT
 from ladle_preallocation.data_modeling.features import parse_time
 
 CRANE_SHEET = "CRANE_STATUS_HIS - 副本"
 PLAN_SHEET = "PLAN_TAPPING - 副本"
+LOCATION_SHEET = "Sheet1"
 PLAN_MACHINE_HEADERS = [f"Column{i}" for i in range(1, 53)]
 PLAN_LOCATION_HEADERS = {
     "mapped_span",
@@ -22,6 +24,7 @@ PLAN_LOCATION_HEADERS = {
     "mapped_station_name",
     "location_mapping_status",
 }
+LOCATION_HEADERS = ("LOC_LOCATION", "SPAN_NAME", "POS_X", "LOC_TYPE", "LOC_STATUS", "GWDMC")
 
 
 def parse_production_time(value: Any) -> tuple[float | None, bool]:
@@ -120,6 +123,83 @@ def read_plan(path: str | Path, max_rows: int | None = None) -> list[dict[str, A
         return records
     finally:
         workbook.close()
+
+
+def read_location(path: str | Path, max_rows: int | None = None) -> dict[str, dict[str, Any]]:
+    """Read the plant location dictionary keyed by its stable location code."""
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if LOCATION_SHEET not in workbook.sheetnames:
+            raise ValueError(f"未找到位置字典工作表: {LOCATION_SHEET}")
+        sheet = workbook[LOCATION_SHEET]
+        header = tuple(next(sheet.iter_rows(min_row=1, max_row=1, values_only=True)))
+        if header[: len(LOCATION_HEADERS)] != LOCATION_HEADERS:
+            raise ValueError(
+                f"位置字典列序不一致：期望 {LOCATION_HEADERS}，实际 {header[:len(LOCATION_HEADERS)]}"
+            )
+        locations: dict[str, dict[str, Any]] = {}
+        emitted = 0
+        for row in _values(sheet, 2, max_rows):
+            values = list(row[: len(LOCATION_HEADERS)])
+            if not any(value not in (None, "") for value in values):
+                continue
+            code = str(values[0] or "").strip()
+            if not code:
+                raise ValueError("位置字典存在空的 LOC_LOCATION")
+            if code in locations:
+                raise ValueError(f"位置字典存在重复 LOC_LOCATION: {code}")
+            raw_x = values[2]
+            try:
+                pos_x = None if raw_x in (None, "") else float(raw_x)
+            except (TypeError, ValueError):
+                pos_x = None
+            position_valid = (
+                pos_x is not None
+                and DEFAULT_X_LOWER_LIMIT <= pos_x <= DEFAULT_X_UPPER_LIMIT
+            )
+            locations[code] = {
+                "location_code": code,
+                "span_name": values[1],
+                "pos_x": pos_x,
+                "loc_type": values[3],
+                "loc_status": values[4],
+                "description": values[5],
+                "position_valid": position_valid,
+                "position_invalid_reason": (
+                    None if position_valid else (
+                        "missing_or_non_numeric" if pos_x is None else "outside_coordinate_range"
+                    )
+                ),
+            }
+            emitted += 1
+            if max_rows is not None and emitted >= max_rows:
+                break
+        return locations
+    finally:
+        workbook.close()
+
+
+def location_mapping_statistics(
+    plan_records: list[dict[str, Any]], location_map: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """Summarize how PLAN position codes resolve against the location dictionary."""
+    counts = Counter()
+    for row in plan_records:
+        code = str(row.get("ladle_position") or "").strip()
+        if not code:
+            counts["missing_plan_code"] += 1
+            continue
+        record = location_map.get(code)
+        if record is None:
+            counts["missing_location_code"] += 1
+        elif not record.get("position_valid"):
+            counts["missing_coordinate"] += 1
+        else:
+            counts["mapped"] += 1
+    counts["total_plan_rows"] = len(plan_records)
+    counts["unique_plan_codes"] = len({str(row.get("ladle_position") or "").strip() for row in plan_records if row.get("ladle_position") not in (None, "")})
+    counts["dictionary_rows"] = len(location_map)
+    return dict(counts)
 
 
 def dataset_statistics(records: list[dict[str, Any]], critical_fields: tuple[str, ...], time_field: str) -> dict[str, Any]:

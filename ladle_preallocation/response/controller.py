@@ -130,6 +130,7 @@ class TieredResponseController:
         llm_rescheduler: Callable | None = None,
         clock: Callable[[], float] = time.perf_counter,
         rag_context: str | None = None,
+        validator: Callable[[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[Any]], list[dict[str, Any]]] = validate_output,
     ):
         """Initialize with optional LLM rescheduler function.
 
@@ -140,6 +141,7 @@ class TieredResponseController:
         self._llm = llm_rescheduler
         self._clock = clock
         self._rag_context = rag_context or ""
+        self._validator = validator
 
     def _run_decision_tree(
         self,
@@ -152,7 +154,7 @@ class TieredResponseController:
         t0 = self._clock()
         try:
             raw = dt_allocate(heats, ladles, cranes)
-            validated = validate_output(heats, ladles, cranes, raw)
+            validated = self._validator(heats, ladles, cranes, raw)
         except Exception as exc:
             elapsed = self._clock() - t0
             return ResponseResult(
@@ -163,7 +165,14 @@ class TieredResponseController:
                 reason=f"决策树异常: {exc}",
             )
         elapsed = self._clock() - t0
-        success = all(a.get("action") == "assign" for a in validated)
+        expected_ids = {str(heat["heat_id"]) for heat in heats}
+        validated_ids = [str(row.get("heat_id", "")) for row in validated]
+        complete = (
+            len(validated_ids) == len(expected_ids)
+            and set(validated_ids) == expected_ids
+            and len(set(validated_ids)) == len(validated_ids)
+        )
+        success = complete and all(a.get("action") == "assign" for a in validated)
         return ResponseResult(
             path=ResponsePath.DECISION_TREE_SUCCESS if success else ResponsePath.DECISION_TREE_FAILURE,
             assignments=validated,
@@ -189,6 +198,7 @@ class TieredResponseController:
                 success=False,
                 elapsed_seconds=0.0,
                 reason="LLM 重调度器未配置",
+                remaining_budget_seconds=remaining_budget_seconds,
             )
         if remaining_budget_seconds <= 0:
             return ResponseResult(
@@ -211,6 +221,8 @@ class TieredResponseController:
                 success=False,
                 elapsed_seconds=elapsed,
                 reason=f"LLM ReAct 异常: {exc}",
+                remaining_budget_seconds=max(0.0, remaining_budget_seconds - elapsed),
+                failure_reasons=["llm_exception"],
             )
         elapsed = self._clock() - t0
         if elapsed > remaining_budget_seconds:
@@ -256,8 +268,8 @@ class TieredResponseController:
             kwargs["rag_context"] = self._rag_context
         return target(heats, ladles, cranes, **kwargs)
 
-    @staticmethod
     def _normalise_llm_result(
+        self,
         result: Any,
         heats: list[dict[str, Any]],
         ladles: list[dict[str, Any]],
@@ -272,13 +284,56 @@ class TieredResponseController:
         heat_ids = [str(heat["heat_id"]) for heat in heats]
         returned_ids = [str(row.get("heat_id", "")) for row in assignments]
         complete = len(returned_ids) == len(heat_ids) and set(returned_ids) == set(heat_ids) and len(set(returned_ids)) == len(returned_ids)
-        validated = validate_output(heats, ladles, cranes, assignments)
+        validated = self._validator(heats, ladles, cranes, assignments)
         valid = complete and all(row.get("action") == "assign" for row in validated)
         for row in validated:
             row["algorithm"] = "llm_react"
         feedback["complete"] = complete
         feedback["validated_actions"] = {str(row["heat_id"]): row["action"] for row in validated}
         return bool(declared_success) and valid, validated, feedback
+
+    @staticmethod
+    def _failure_context(
+        scenario: DisturbedScenario,
+        decision_tree: ResponseResult,
+        budget: float | None,
+    ) -> dict[str, Any]:
+        """Build the bounded, credential-free context passed to LLM adapters."""
+        return {
+            "decision_tree_failure": decision_tree.reason,
+            "decision_tree_actions": {
+                str(row.get("heat_id", "")): row.get("action")
+                for row in decision_tree.assignments
+            },
+            "affected_heat_ids": list(scenario.affected_heat_ids),
+            "excluded_locked_heat_ids": list(scenario.excluded_heat_ids),
+            "remaining_budget_seconds": budget,
+            "event": scenario.audit.get("event", {}),
+            "event_state_deltas": scenario.audit.get("event_state_deltas", []),
+            "local_constraints": {
+                "heats": [
+                    {
+                        key: heat.get(key)
+                        for key in ("heat_id", "required_grade", "window_start", "window_end", "pour_at", "priority", "refining_route")
+                    }
+                    for heat in scenario.heats_needing_reallocation
+                ],
+                "ladles": [
+                    {
+                        key: ladle.get(key)
+                        for key in ("ladle_id", "grade", "position_m", "position_code", "location_mapping_status", "weight_tonnes", "age_seconds", "max_age_seconds")
+                    }
+                    for ladle in scenario.remaining_ladles
+                ],
+                "cranes": [
+                    {
+                        key: crane.get(key)
+                        for key in ("crane_id", "position_m", "speed_mps", "max_load_tonnes", "current_load_tonnes", "safe_distance_m", "limit_0_m", "limit_1_m")
+                    }
+                    for crane in scenario.remaining_cranes
+                ],
+            },
+        }
 
     def _frozen_result(
         self,
@@ -349,8 +404,12 @@ class TieredResponseController:
                 list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
             )
             dt_result.assignments = merged
-            self._attach_metrics(dt_result, scenario)
-            return dt_result, None
+            if _preserves_unaffected(merged, scenario.baseline_assignments, scenario.affected_heat_ids):
+                self._attach_metrics(dt_result, scenario)
+                return dt_result, None
+            dt_result.success = False
+            dt_result.path = ResponsePath.DECISION_TREE_FAILURE
+            dt_result.reason = "决策树合并结果修改了影响范围外炉次"
 
         budget = scenario.remaining_budget_seconds
         # Older callers may not provide an event coordinate; they retain the
@@ -378,7 +437,7 @@ class TieredResponseController:
             scenario.remaining_ladles,
             scenario.remaining_cranes,
             budget if budget is not None else float("inf"),
-            {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "event": scenario.audit.get("event", {})},
+            self._failure_context(scenario, dt_result, budget),
         )
 
         if llm_result.success:
@@ -388,8 +447,13 @@ class TieredResponseController:
                 list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
             )
             llm_result.assignments = merged
-            self._attach_metrics(llm_result, scenario)
-            return llm_result, llm_result
+            if _preserves_unaffected(merged, scenario.baseline_assignments, scenario.affected_heat_ids):
+                self._attach_metrics(llm_result, scenario)
+                return llm_result, llm_result
+            llm_result.success = False
+            llm_result.path = ResponsePath.LLM_REACT_FAILURE
+            llm_result.reason = "LLM 合并结果修改了影响范围外炉次"
+            llm_result.failure_reasons = ["unaffected_assignment_changed"]
 
         # Step 4: LLM also failed → Frozen + alarm
         frozen = self._frozen_result(
@@ -449,13 +513,13 @@ class TieredResponseController:
         budget = scenario.remaining_budget_seconds
         if budget is not None:
             budget = max(0.0, budget - dt_result.elapsed_seconds)
-        if self._llm is not None and remaining_heats and budget != 0.0 and (not dt_result.success or force_llm_on_success):
+        if self._llm is not None and remaining_heats and not scenario.is_emergency and (budget is None or budget > 0.0) and (not dt_result.success or force_llm_on_success):
             llm_result = self._run_llm_react(
                 remaining_heats,
                 scenario.remaining_ladles,
                 scenario.remaining_cranes,
                 budget if budget is not None else float("inf"),
-                {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "experimental_forced": force_llm_on_success and dt_result.success},
+                {**self._failure_context(scenario, dt_result, budget), "experimental_forced": force_llm_on_success and dt_result.success},
             )
             llm_merged = _merge_assignments(
                 scenario.frozen_assignments,
@@ -463,6 +527,11 @@ class TieredResponseController:
                 list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
             )
             llm_result.assignments = llm_merged
+            if not _preserves_unaffected(llm_merged, scenario.baseline_assignments, scenario.affected_heat_ids):
+                llm_result.success = False
+                llm_result.path = ResponsePath.LLM_REACT_FAILURE
+                llm_result.reason = "LLM 合并结果修改了影响范围外炉次"
+                llm_result.failure_reasons = ["unaffected_assignment_changed"]
             llm = llm_result
 
         for result in (frozen, dt_result, llm):
@@ -502,10 +571,26 @@ def _merge_assignments(
     for hid, a in frozen.items():
         merged[hid] = dict(a)
     for hid, a in new_assignments.items():
-        row = dict(a)
-        if not reference_keys:
-            merged[hid] = row
-        else:
-            out = {k: row.get(k) for k in reference_keys if k in row}
-            merged[hid] = out
+        # Preserve validated extension fields such as refining routes. The old
+        # projection silently discarded decisions absent from the baseline.
+        merged[hid] = dict(a)
     return list(merged.values())
+
+
+def _preserves_unaffected(
+    merged: list[dict[str, Any]],
+    baseline: list[dict[str, Any]],
+    affected_heat_ids: list[str],
+) -> bool:
+    """Check that local response merging did not alter frozen resources."""
+    affected = set(affected_heat_ids)
+    by_heat = {str(row.get("heat_id", "")): row for row in merged}
+    protected_fields = ("ladle_id", "crane_id", "refining_route", "action")
+    for original in baseline:
+        heat_id = str(original.get("heat_id", ""))
+        if heat_id in affected:
+            continue
+        candidate = by_heat.get(heat_id)
+        if candidate is None or any(candidate.get(field) != original.get(field) for field in protected_fields):
+            return False
+    return True

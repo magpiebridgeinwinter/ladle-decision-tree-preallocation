@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="llm-rescheduling-flow-title llm-rescheduling-flow-desc">
+  <title id="llm-rescheduling-flow-title">决策树与 Codex 的独立重排对比</title>
+  <desc id="llm-rescheduling-flow-desc">同一预配基线和扰动窗口分别进入决策树重排与 Codex 重排，两个方案通过共同终检后比较并选择。</desc>
+  <defs>
+    <marker id="flow-arrow" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto"><path d="M0 0 L12 4 L0 8 Z" fill="#4f5d75"/></marker>
+    <marker id="flow-arrow-accent" markerWidth="12" markerHeight="8" refX="10" refY="4" orient="auto"><path d="M0 0 L12 4 L0 8 Z" fill="#eb6c36"/></marker>
+    <style>
+      .paper { fill: #f5f5f5; }
+      .eyebrow { font: 600 12px "Songti SC", "STSong", serif; letter-spacing: .16em; fill: #7a8399; }
+      .title { font: 600 32px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .subtitle { font: 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .tag { font: 600 12px "Songti SC", "STSong", serif; letter-spacing: .12em; }
+      .node-title { font: 600 24px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .node-sub { font: 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .node-mono { font: 600 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .label { font: 600 14px "Songti SC", "STSong", serif; fill: #7a8399; }
+      .result-title { font: 600 20px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .result-sub { font: 16px "Songti SC", "STSong", serif; fill: #4f5d75; }
+      .metric-label { font: 600 12px "Songti SC", "STSong", serif; letter-spacing: .05em; fill: #4f5d75; }
+      .metric-value { font: 600 28px "Songti SC", "STSong", serif; fill: #2d3142; }
+      .metric-note { font: 14px "Songti SC", "STSong", serif; fill: #4f5d75; }
+    </style>
+  </defs>
+  <rect width="1600" height="900" class="paper"/>
+
+  <!-- Shared input fans out to two independent solve branches. -->
+  <path d="M800 288 V320 H332 V360" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#flow-arrow)"/>
+  <path d="M800 288 V320 H1268 V360" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#flow-arrow)"/>
+  <path d="M332 600 V636 H800 V680" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#flow-arrow)"/>
+  <path d="M1268 600 V636 H800 V680" fill="none" stroke="#eb6c36" stroke-width="2.5" marker-end="url(#flow-arrow-accent)"/>
+
+  <rect x="72" y="44" width="288" height="32" rx="6" fill="#ffffff" stroke="#7a8399" stroke-width="1"/>
+  <text x="216" y="65" text-anchor="middle" class="metric-label">真实数据 · 31 炉 · 11:00–11:20</text>
+  <text x="72" y="124" class="eyebrow">钢包调度 · 方案对比</text>
+  <text x="72" y="172" class="title">不是“谁更聪明”，而是“谁能安全下发”</text>
+  <text x="72" y="208" class="subtitle">两条线路吃同一份输入；先看能不能用，再看谁更准、更稳。</text>
+
+  <!-- Shared input node. -->
+  <g>
+    <rect x="72" y="236" width="1456" height="52" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.5"/>
+    <rect x="92" y="252" width="64" height="20" rx="3" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+    <text x="124" y="266" text-anchor="middle" class="tag" fill="#4f5d75">INPUT</text>
+    <text x="800" y="270" text-anchor="middle" class="node-sub">预配基线 + 行车 2500 离线 + 同一 31 炉局部窗口</text>
+  </g>
+
+  <!-- Decision-tree branch. -->
+  <g>
+    <rect x="72" y="360" width="520" height="240" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.5"/>
+    <rect x="96" y="384" width="44" height="20" rx="3" fill="#f5f5f5" stroke="#4f5d75" stroke-width="1"/>
+    <text x="118" y="398" text-anchor="middle" class="tag" fill="#4f5d75">规则</text>
+    <text x="332" y="444" text-anchor="middle" class="node-title">决策树重排</text>
+    <text x="332" y="480" text-anchor="middle" class="node-sub">毫秒级规则求解 · 独立读取预配基线</text>
+    <text x="332" y="532" text-anchor="middle" class="node-mono">完成 30/31</text>
+    <text x="332" y="564" text-anchor="middle" class="node-sub">缺 1 炉 · 路线约束未满足</text>
+  </g>
+
+  <!-- Codex branch. -->
+  <g>
+    <rect x="1008" y="360" width="520" height="240" rx="6" fill="#f5f5f5" stroke="#eb6c36" stroke-width="2"/>
+    <rect x="1032" y="384" width="44" height="20" rx="3" fill="#eb6c36" stroke="#eb6c36" stroke-width="1"/>
+    <text x="1054" y="398" text-anchor="middle" class="tag" fill="#ffffff">大模型</text>
+    <text x="1268" y="444" text-anchor="middle" class="node-title">Codex 重排</text>
+    <text x="1268" y="480" text-anchor="middle" class="node-sub">决策树失败后介入 · 独立读取预配基线</text>
+    <text x="1268" y="532" text-anchor="middle" class="node-mono">完成 31/31</text>
+    <text x="1268" y="564" text-anchor="middle" class="node-sub">改配 3 炉 · 28 炉保留预配基线</text>
+  </g>
+
+  <!-- Shared validation and selection. -->
+  <g>
+    <rect x="384" y="680" width="832" height="120" rx="6" fill="#ffffff" stroke="#2e5aa8" stroke-width="2"/>
+    <rect x="408" y="704" width="64" height="20" rx="3" fill="#f5f5f5" stroke="#2e5aa8" stroke-width="1"/>
+    <text x="440" y="718" text-anchor="middle" class="tag" fill="#2e5aa8">CHECK</text>
+    <text x="800" y="732" text-anchor="middle" class="result-title">共同终检后选择</text>
+    <text x="800" y="764" text-anchor="middle" class="result-sub">先判硬约束与完整性，再比较按时率、延迟和改配规模</text>
+    <text x="800" y="788" text-anchor="middle" class="node-mono">本次推荐 Codex 重排 · 规则违反 0</text>
+  </g>
+
+  <text x="616" y="328" text-anchor="middle" class="label">同一输入</text>
+  <text x="984" y="328" text-anchor="middle" class="label">同一输入</text>
+  <text x="548" y="652" text-anchor="middle" class="label">送入终检</text>
+  <text x="1052" y="652" text-anchor="middle" class="label" fill="#eb6c36">送入终检</text>
+
+  <line x1="72" y1="836" x2="1528" y2="836" stroke="#7a8399" stroke-width="1"/>
+  <text x="72" y="864" class="metric-note">选择原则：可行性是门槛；两方都可行时，优先按时率，再看延迟，最后看改配规模。</text>
+  <text x="1528" y="864" text-anchor="end" class="metric-note">预配基线：共同输入 · 决策树重排：规则方案 · Codex 重排：大模型方案</text>
+</svg>

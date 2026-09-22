@@ -1,0 +1,184 @@
+{
+  "config": {
+    "num_scenarios": 3,
+    "seed": 42
+  },
+  "summary": {
+    "total_scenarios": 3,
+    "total_affected_heats": 4,
+    "dt_success_rate": 1.0,
+    "dt_total_saved_over_frozen": 4,
+    "llm_attempted": 0,
+    "dtree_fail_llm_success_rate": null,
+    "frozen_avoidance_rate": null,
+    "llm_success_rate": null,
+    "llm_total_saved_over_dt": 0,
+    "llm_total_saved_over_frozen": 0,
+    "dt_avg_elapsed_ms": 0.11356900601337354,
+    "llm_avg_elapsed_s": null,
+    "frozen_metrics": {
+      "on_time_rate": 0.0,
+      "priority_on_time": 0.0,
+      "average_delay_seconds": 300.0,
+      "max_delay_seconds": 400.0,
+      "changed_heats": 1.3333333333333333,
+      "human_review_rate": 0.3333333333333333,
+      "rule_violations": 0.0,
+      "decision_seconds": 0.0
+    },
+    "decision_tree_metrics": {
+      "on_time_rate": 0.4444444444444444,
+      "priority_on_time": 0.4444444444444444,
+      "average_delay_seconds": 166.66666666666666,
+      "max_delay_seconds": 366.6666666666667,
+      "changed_heats": 1.3333333333333333,
+      "human_review_rate": 0.0,
+      "rule_violations": 0.0,
+      "decision_seconds": 0.00011356900601337354
+    },
+    "llm_metrics": {
+      "on_time_rate": null,
+      "priority_on_time": null,
+      "average_delay_seconds": null,
+      "max_delay_seconds": null,
+      "changed_heats": null,
+      "human_review_rate": null,
+      "rule_violations": null,
+      "decision_seconds": null
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "scenario_001",
+      "disturbance": "行车离线故障",
+      "num_affected": 2,
+      "num_total": 3,
+      "frozen_assigned": 1,
+      "dt_assigned": 3,
+      "dt_saved": 2,
+      "dt_path": "decision_tree_success",
+      "dt_elapsed_s": 0.0002,
+      "llm_assigned": null,
+      "llm_saved_over_dt": null,
+      "llm_saved_over_frozen": null,
+      "llm_path": null,
+      "llm_elapsed_s": null,
+      "event": {
+        "kind": "crane_offline",
+        "resource_id": "C1",
+        "occurred_at": 248.97837076069524,
+        "metadata": {},
+        "description": "行车离线故障"
+      },
+      "frozen_metrics": {
+        "on_time_rate": 0.0,
+        "priority_on_time": 0.0,
+        "average_delay_seconds": 300.0,
+        "max_delay_seconds": 400.0,
+        "changed_heats": 2,
+        "human_review_rate": 0.3333333333333333,
+        "rule_violations": 0,
+        "decision_seconds": 0.0
+      },
+      "decision_tree_metrics": {
+        "on_time_rate": 0.6666666666666666,
+        "priority_on_time": 0.6666666666666666,
+        "average_delay_seconds": 100.0,
+        "max_delay_seconds": 300.0,
+        "changed_heats": 2,
+        "human_review_rate": 0.0,
+        "rule_violations": 0,
+        "decision_seconds": 0.00017145799938589334
+      },
+      "llm_metrics": null
+    },
+    {
+      "scenario_id": "scenario_002",
+      "disturbance": "行车离线故障",
+      "num_affected": 1,
+      "num_total": 3,
+      "frozen_assigned": 2,
+      "dt_assigned": 3,
+      "dt_saved": 1,
+      "dt_path": "decision_tree_success",
+      "dt_elapsed_s": 0.0001,
+      "llm_assigned": null,
+      "llm_saved_over_dt": null,
+      "llm_saved_over_frozen": null,
+      "llm_path": null,
+      "llm_elapsed_s": null,
+      "event": {
+        "kind": "crane_offline",
+        "resource_id": "C2",
+        "occurred_at": 318.0985024898079,
+        "metadata": {},
+        "description": "行车离线故障"
+      },
+      "frozen_metrics": {
+        "on_time_rate": 0.0,
+        "priority_on_time": 0.0,
+        "average_delay_seconds": 300.0,
+        "max_delay_seconds": 400.0,
+        "changed_heats": 1,
+        "human_review_rate": 0.3333333333333333,
+        "rule_violations": 0,
+        "decision_seconds": 0.0
+      },
+      "decision_tree_metrics": {
+        "on_time_rate": 0.3333333333333333,
+        "priority_on_time": 0.3333333333333333,
+        "average_delay_seconds": 200.0,
+        "max_delay_seconds": 400.0,
+        "changed_heats": 1,
+        "human_review_rate": 0.0,
+        "rule_violations": 0,
+        "decision_seconds": 8.395803160965443e-05
+      },
+      "llm_metrics": null
+    },
+    {
+      "scenario_id": "scenario_003",
+      "disturbance": "行车离线故障",
+      "num_affected": 1,
+      "num_total": 3,
+      "frozen_assigned": 2,
+      "dt_assigned": 3,
+      "dt_saved": 1,
+      "dt_path": "decision_tree_success",
+      "dt_elapsed_s": 0.0001,
+      "llm_assigned": null,
+      "llm_saved_over_dt": null,
+      "llm_saved_over_frozen": null,
+      "llm_path": null,
+      "llm_elapsed_s": null,
+      "event": {
+        "kind": "crane_offline",
+        "resource_id": "C2",
+        "occurred_at": 243.72759496072067,
+        "metadata": {},
+        "description": "行车离线故障"
+      },
+      "frozen_metrics": {
+        "on_time_rate": 0.0,
+        "priority_on_time": 0.0,
+        "average_delay_seconds": 300.0,
+        "max_delay_seconds": 400.0,
+        "changed_heats": 1,
+        "human_review_rate": 0.3333333333333333,
+        "rule_violations": 0,
+        "decision_seconds": 0.0
+      },
+      "decision_tree_metrics": {
+        "on_time_rate": 0.3333333333333333,
+        "priority_on_time": 0.3333333333333333,
+        "average_delay_seconds": 200.0,
+        "max_delay_seconds": 400.0,
+        "changed_heats": 1,
+        "human_review_rate": 0.0,
+        "rule_violations": 0,
+        "decision_seconds": 8.529098704457283e-05
+      },
+      "llm_metrics": null
+    }
+  ]
+}

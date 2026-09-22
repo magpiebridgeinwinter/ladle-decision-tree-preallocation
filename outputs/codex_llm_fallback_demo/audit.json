@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "scenario_id": "codex_llm_fallback_001",
+  "scenario": {
+    "event": {
+      "kind": "crane_offline",
+      "resource_id": "C0",
+      "occurred_at": 100.0,
+      "metadata": {},
+      "description": "基线行车 C0 突发离线"
+    },
+    "affected_heat_ids": [
+      "H-FLEX",
+      "H-TIGHT"
+    ],
+    "earliest_pour_at": 600.0,
+    "safety_buffer_seconds": 90.0,
+    "remaining_budget_seconds": 410.0,
+    "heats": [
+      {
+        "heat_id": "H-FLEX",
+        "required_grade": "4",
+        "target_age_seconds": 0.0,
+        "window_start": 0.0,
+        "window_end": 1000.0,
+        "pour_at": 600.0,
+        "priority": 2
+      },
+      {
+        "heat_id": "H-TIGHT",
+        "required_grade": "5",
+        "enforce_grade": true,
+        "window_start": 0.0,
+        "window_end": 10.0,
+        "pour_at": 600.0,
+        "priority": 1
+      }
+    ],
+    "remaining_ladles": [
+      {
+        "ladle_id": "L-NEAR",
+        "grade": "5",
+        "state": "available",
+        "position_m": 0.0,
+        "weight_tonnes": 80.0,
+        "empty_ladle_weight_tonnes": 140.0,
+        "age_seconds": 1000.0,
+        "max_age_seconds": 1000.0
+      },
+      {
+        "ladle_id": "L-FAR",
+        "grade": "4",
+        "state": "available",
+        "position_m": 100.0,
+        "weight_tonnes": 80.0,
+        "empty_ladle_weight_tonnes": 140.0,
+        "age_seconds": 0.0,
+        "max_age_seconds": 1000.0
+      }
+    ],
+    "remaining_cranes": [
+      {
+        "crane_id": "C1",
+        "position_m": 0.0,
+        "current_load_tonnes": 0.0,
+        "max_load_tonnes": 300.0,
+        "speed_mps": 1.0,
+        "safe_distance_m": 0.0,
+        "limit_0_m": 0.0,
+        "limit_1_m": 100.0
+      },
+      {
+        "crane_id": "C2",
+        "position_m": 100.0,
+        "current_load_tonnes": 150.0,
+        "max_load_tonnes": 300.0,
+        "speed_mps": 1.0,
+        "safe_distance_m": 0.0,
+        "limit_0_m": 50.0,
+        "limit_1_m": 150.0
+      }
+    ]
+  },
+  "llm_invocation": {
+    "provider": "Codex current interactive session",
+    "transport": "Codex-authored proposal injected through TieredResponseController callable",
+    "external_api_called": false,
+    "controller_called_adapter": true,
+    "budget_received_seconds": 409.999680833,
+    "failure_context_received": {
+      "decision_tree_failure": "决策树重排：存在未分配炉次",
+      "affected_heat_ids": [
+        "H-FLEX",
+        "H-TIGHT"
+      ],
+      "experimental_forced": false
+    },
+    "proposal": [
+      {
+        "heat_id": "H-FLEX",
+        "ladle_id": "L-FAR",
+        "crane_id": "C2",
+        "expected_arrival_seconds": 0.0,
+        "reason": "Codex 全局分配：将 C1 保留给紧窗口炉次"
+      },
+      {
+        "heat_id": "H-TIGHT",
+        "ladle_id": "L-NEAR",
+        "crane_id": "C1",
+        "expected_arrival_seconds": 0.0,
+        "reason": "Codex 全局分配：使用近端行车满足 10 秒窗口"
+      }
+    ]
+  },
+  "decision_tree": {
+    "path": "decision_tree_failure",
+    "success": false,
+    "num_assigned": 1,
+    "elapsed_seconds": 0.0003191670000000091,
+    "reason": "决策树重排：存在未分配炉次",
+    "assignments": [
+      {
+        "heat_id": "H-FLEX",
+        "ladle_id": "L-FAR",
+        "crane_id": "C1",
+        "action": "assign",
+        "algorithm": "decision_tree",
+        "grade_match": true,
+        "expected_arrival_seconds": 100.0,
+        "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放",
+        "violations": []
+      },
+      {
+        "heat_id": "H-TIGHT",
+        "ladle_id": null,
+        "crane_id": null,
+        "action": "unassigned",
+        "algorithm": "decision_tree",
+        "grade_match": false,
+        "expected_arrival_seconds": null,
+        "reason": "无可行候选：grade,time_window,x_limit",
+        "violations": []
+      }
+    ],
+    "remaining_budget_seconds": null,
+    "validation_feedback": {}
+  },
+  "codex_llm": {
+    "path": "llm_react_success",
+    "success": true,
+    "num_assigned": 2,
+    "elapsed_seconds": 7.12910000000011e-05,
+    "reason": "LLM ReAct 重调度成功",
+    "assignments": [
+      {
+        "heat_id": "H-FLEX",
+        "ladle_id": "L-FAR",
+        "crane_id": "C2",
+        "action": "assign",
+        "algorithm": "llm_react",
+        "grade_match": true,
+        "expected_arrival_seconds": 0.0,
+        "reason": "Codex 全局分配：将 C1 保留给紧窗口炉次",
+        "violations": []
+      },
+      {
+        "heat_id": "H-TIGHT",
+        "ladle_id": "L-NEAR",
+        "crane_id": "C1",
+        "action": "assign",
+        "algorithm": "llm_react",
+        "grade_match": true,
+        "expected_arrival_seconds": 0.0,
+        "reason": "Codex 全局分配：使用近端行车满足 10 秒窗口",
+        "violations": []
+      }
+    ],
+    "remaining_budget_seconds": 409.99960954200003,
+    "validation_feedback": {
+      "complete": true,
+      "validated_actions": {
+        "H-FLEX": "assign",
+        "H-TIGHT": "assign"
+      }
+    }
+  },
+  "proposal_validation": [
+    {
+      "heat_id": "H-FLEX",
+      "ladle_id": "L-FAR",
+      "crane_id": "C2",
+      "expected_arrival_seconds": 0.0,
+      "reason": "Codex 全局分配：将 C1 保留给紧窗口炉次",
+      "algorithm": "llm_react",
+      "action": "assign",
+      "violations": [],
+      "grade_match": true
+    },
+    {
+      "heat_id": "H-TIGHT",
+      "ladle_id": "L-NEAR",
+      "crane_id": "C1",
+      "expected_arrival_seconds": 0.0,
+      "reason": "Codex 全局分配：使用近端行车满足 10 秒窗口",
+      "algorithm": "llm_react",
+      "action": "assign",
+      "violations": [],
+      "grade_match": true
+    }
+  ],
+  "comparison": {
+    "scenario_id": "codex_llm_fallback_001",
+    "disturbance": "基线行车 C0 突发离线",
+    "num_affected": 2,
+    "num_total": 2,
+    "frozen_assigned": 0,
+    "dt_assigned": 1,
+    "dt_saved": 1,
+    "dt_path": "decision_tree_failure",
+    "dt_elapsed_s": 0.0003,
+    "llm_assigned": 2,
+    "llm_saved_over_dt": 1,
+    "llm_saved_over_frozen": 2,
+    "llm_path": "llm_react_success",
+    "llm_elapsed_s": 0.0001,
+    "event": {
+      "kind": "crane_offline",
+      "resource_id": "C0",
+      "occurred_at": 100.0,
+      "metadata": {},
+      "description": "基线行车 C0 突发离线"
+    },
+    "frozen_metrics": {
+      "on_time_rate": 0.0,
+      "priority_on_time": 0.0,
+      "average_delay_seconds": 505.0,
+      "max_delay_seconds": 1000.0,
+      "changed_heats": 2,
+      "human_review_rate": 0.5,
+      "rule_violations": 0,
+      "decision_seconds": 0.0
+    },
+    "decision_tree_metrics": {
+      "on_time_rate": 0.5,
+      "priority_on_time": 0.6666666666666666,
+      "average_delay_seconds": 5.0,
+      "max_delay_seconds": 10.0,
+      "changed_heats": 2,
+      "human_review_rate": 0.0,
+      "rule_violations": 0,
+      "decision_seconds": 0.0003191670000000091
+    },
+    "llm_metrics": {
+      "on_time_rate": 1.0,
+      "priority_on_time": 1.0,
+      "average_delay_seconds": 0.0,
+      "max_delay_seconds": 0.0,
+      "changed_heats": 2,
+      "human_review_rate": 0.0,
+      "rule_violations": 0,
+      "decision_seconds": 7.12910000000011e-05
+    }
+  },
+  "conclusion": "决策树仅分配 1/2；Codex 全局方案分配 2/2，并通过相同硬约束终检。"
+}

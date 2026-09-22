@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify local rescheduling, evidence, validation, and secret contracts."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Verify source records survive persistence and API round trips."}

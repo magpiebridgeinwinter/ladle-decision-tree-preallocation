@@ -30,7 +30,12 @@ def _required_missing(heat: dict[str, Any]) -> list[str]:
     return [field for field in ("heat_id", "required_grade") if heat.get(field) in (None, "")]
 
 
-def allocate(heats: list[dict[str, Any]], ladles: list[dict[str, Any]], cranes: list[dict[str, Any]]) -> list[DecisionTreeAssignment]:
+def allocate(
+    heats: list[dict[str, Any]],
+    ladles: list[dict[str, Any]],
+    cranes: list[dict[str, Any]],
+    weights: dict[str, float] | None = None,
+) -> list[DecisionTreeAssignment]:
     """Run the documented tree nodes, then use shared validator as final authority."""
     base_loads = {str(c["crane_id"]): max(0.0, float(c.get("current_load_tonnes", 0) or 0)) for c in cranes}
     transported_loads = dict(base_loads)
@@ -71,7 +76,7 @@ def allocate(heats: list[dict[str, Any]], ladles: list[dict[str, Any]], cranes: 
                     "crane_load_time_safety:pass",
                     "yellow_rule_score:" + ("warn." + ".".join(rules.warnings) if rules.warnings else "pass"),
                 )
-                options.append((score_candidate(heat, ladle, candidate_crane, transported_loads, available), ladle, candidate_crane, path))
+                options.append((score_candidate(heat, ladle, candidate_crane, transported_loads, available, weights), ladle, candidate_crane, path))
         if not options:
             action = "request_human_review" if not cranes or any(item.startswith("missing.") for item in rejected) else "unassigned"
             reason = "无可行候选：" + (",".join(sorted(set(rejected))) if rejected else "钢包或行车不可用")

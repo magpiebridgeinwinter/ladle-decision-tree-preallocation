@@ -1,0 +1,517 @@
+"""Tiered response controller: decision-tree rerank → LLM ReAct → Frozen.
+
+Implements the disturbance response flow from the report:
+- Emergency (earliest_casting <= 90s): decision tree fast rerank,
+  failure → Frozen + call human.
+- Non-emergency (earliest_casting > 90s): decision tree rerank first,
+  failure → LLM ReAct, failure → Frozen + alarm.
+"""
+
+from __future__ import annotations
+
+import time
+import inspect
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Callable
+
+from ladle_preallocation.decision_tree.allocator import allocate as dt_allocate
+from ladle_preallocation.decision_tree.validation import validate_output
+from ladle_preallocation.disturbance.injector import DisturbedScenario
+from ladle_preallocation.evaluation.metrics import evaluate_path
+
+
+class ResponsePath(str, Enum):
+    """Which path the response took."""
+
+    DECISION_TREE_SUCCESS = "decision_tree_success"
+    DECISION_TREE_FAILURE = "decision_tree_failure"
+    LLM_REACT_SUCCESS = "llm_react_success"
+    LLM_REACT_FAILURE = "llm_react_failure"
+    FROZEN = "frozen"
+    CALL_HUMAN = "call_human"
+
+
+@dataclass
+class ResponseResult:
+    """Result of a single response attempt."""
+
+    path: ResponsePath
+    assignments: list[dict[str, Any]]
+    success: bool
+    elapsed_seconds: float
+    reason: str = ""
+    extra: dict[str, Any] = field(default_factory=dict)
+    remaining_budget_seconds: float | None = None
+    human_review_required: bool = False
+    failure_reasons: list[str] = field(default_factory=list)
+    validation_feedback: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def num_assigned(self) -> int:
+        return sum(1 for a in self.assignments if a.get("action") == "assign")
+
+    @property
+    def num_failed(self) -> int:
+        return sum(1 for a in self.assignments if a.get("action") != "assign")
+
+
+@dataclass
+class ThreeWayComparison:
+    """Compare three paths: Frozen, Decision Tree, LLM ReAct."""
+
+    scenario_id: str
+    disturbance_desc: str
+
+    num_affected: int
+    num_total: int
+
+    frozen: ResponseResult
+    decision_tree: ResponseResult
+    llm_react: ResponseResult | None = None
+
+    @property
+    def dt_saved(self) -> int:
+        """How many heats did decision tree save over frozen."""
+        return self.decision_tree.num_assigned - self.frozen.num_assigned
+
+    @property
+    def llm_saved(self) -> int | None:
+        """How many heats did LLM save over decision tree."""
+        if self.llm_react is None:
+            return None
+        return self.llm_react.num_assigned - self.decision_tree.num_assigned
+
+    @property
+    def llm_delta_from_frozen(self) -> int | None:
+        """How many heats did LLM save over frozen."""
+        if self.llm_react is None:
+            return None
+        return self.llm_react.num_assigned - self.frozen.num_assigned
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "scenario_id": self.scenario_id,
+            "disturbance": self.disturbance_desc,
+            "num_affected": self.num_affected,
+            "num_total": self.num_total,
+            "frozen_assigned": self.frozen.num_assigned,
+            "dt_assigned": self.decision_tree.num_assigned,
+            "dt_saved": self.dt_saved,
+            "dt_path": self.decision_tree.path.value,
+            "dt_elapsed_s": round(self.decision_tree.elapsed_seconds, 4),
+            "llm_assigned": self.llm_react.num_assigned if self.llm_react else None,
+            "llm_saved_over_dt": self.llm_saved,
+            "llm_saved_over_frozen": self.llm_delta_from_frozen,
+            "llm_path": self.llm_react.path.value if self.llm_react else None,
+            "llm_elapsed_s": round(self.llm_react.elapsed_seconds, 4) if self.llm_react else None,
+            "event": self.frozen.extra.get("event", {}),
+            "frozen_metrics": self.frozen.metrics,
+            "decision_tree_metrics": self.decision_tree.metrics,
+            "llm_metrics": self.llm_react.metrics if self.llm_react else None,
+        }
+
+
+class TieredResponseController:
+    """Controller for the disturbance response pipeline.
+
+    Flow:
+    1. Try decision tree rerank on remaining resources
+    2. If emergency (< 90s) and DT fails → Frozen + call human
+    3. If non-emergency (> 90s) and DT fails → LLM ReAct
+    4. If LLM fails → Frozen + alarm
+    """
+
+    EMERGENCY_THRESHOLD = 90.0  # seconds
+
+    def __init__(
+        self,
+        llm_rescheduler: Callable | None = None,
+        clock: Callable[[], float] = time.perf_counter,
+        rag_context: str | None = None,
+        validator: Callable[[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[Any]], list[dict[str, Any]]] = validate_output,
+    ):
+        """Initialize with optional LLM rescheduler function.
+
+        Args:
+            llm_rescheduler: Callable that takes (heats, ladles, cranes) and
+                returns (success: bool, assignments: list[dict]).
+        """
+        self._llm = llm_rescheduler
+        self._clock = clock
+        self._rag_context = rag_context or ""
+        self._validator = validator
+
+    def _run_decision_tree(
+        self,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+        path_label: str,
+    ) -> ResponseResult:
+        """Run decision tree allocation and return result."""
+        t0 = self._clock()
+        try:
+            raw = dt_allocate(heats, ladles, cranes)
+            validated = self._validator(heats, ladles, cranes, raw)
+        except Exception as exc:
+            elapsed = self._clock() - t0
+            return ResponseResult(
+                path=ResponsePath.DECISION_TREE_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=elapsed,
+                reason=f"决策树异常: {exc}",
+            )
+        elapsed = self._clock() - t0
+        expected_ids = {str(heat["heat_id"]) for heat in heats}
+        validated_ids = [str(row.get("heat_id", "")) for row in validated]
+        complete = (
+            len(validated_ids) == len(expected_ids)
+            and set(validated_ids) == expected_ids
+            and len(set(validated_ids)) == len(validated_ids)
+        )
+        success = complete and all(a.get("action") == "assign" for a in validated)
+        return ResponseResult(
+            path=ResponsePath.DECISION_TREE_SUCCESS if success else ResponsePath.DECISION_TREE_FAILURE,
+            assignments=validated,
+            success=success,
+            elapsed_seconds=elapsed,
+            reason=f"{path_label}：{'全部成功' if success else '存在未分配炉次'}",
+            extra={"algorithm": "decision_tree"},
+        )
+
+    def _run_llm_react(
+        self,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+        remaining_budget_seconds: float,
+        failure_context: dict[str, Any],
+    ) -> ResponseResult:
+        """Run LLM ReAct rescheduling."""
+        if self._llm is None:
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=0.0,
+                reason="LLM 重调度器未配置",
+            )
+        if remaining_budget_seconds <= 0:
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=0.0,
+                reason="LLM 时间预算耗尽",
+                remaining_budget_seconds=remaining_budget_seconds,
+                failure_reasons=["budget_exhausted"],
+            )
+        t0 = self._clock()
+        try:
+            result = self._invoke_llm(heats, ladles, cranes, remaining_budget_seconds, failure_context)
+        except Exception as exc:
+            elapsed = self._clock() - t0
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=elapsed,
+                reason=f"LLM ReAct 异常: {exc}",
+            )
+        elapsed = self._clock() - t0
+        if elapsed > remaining_budget_seconds:
+            return ResponseResult(
+                path=ResponsePath.LLM_REACT_FAILURE,
+                assignments=[],
+                success=False,
+                elapsed_seconds=elapsed,
+                reason="LLM 调用超出剩余时间预算",
+                remaining_budget_seconds=0.0,
+                failure_reasons=["budget_timeout"],
+            )
+        success, assignments, feedback = self._normalise_llm_result(result, heats, ladles, cranes)
+        return ResponseResult(
+            path=ResponsePath.LLM_REACT_SUCCESS if success else ResponsePath.LLM_REACT_FAILURE,
+            assignments=assignments,
+            success=success,
+            elapsed_seconds=elapsed,
+            reason="LLM ReAct 重调度成功" if success else "LLM ReAct 未能解决所有冲突或硬约束终检失败",
+            extra={"algorithm": "llm_react", "failure_context": failure_context},
+            remaining_budget_seconds=max(0.0, remaining_budget_seconds - elapsed),
+            failure_reasons=[] if success else ["invalid_or_incomplete_llm_proposal"],
+            validation_feedback=feedback,
+        )
+
+    def _invoke_llm(
+        self,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+        budget: float,
+        failure_context: dict[str, Any],
+    ) -> Any:
+        target = self._llm.reschedule if hasattr(self._llm, "reschedule") else self._llm
+        parameters = inspect.signature(target).parameters
+        accepts_kwargs = any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+        kwargs: dict[str, Any] = {}
+        if "remaining_budget_seconds" in parameters or accepts_kwargs:
+            kwargs["remaining_budget_seconds"] = budget
+        if "failure_context" in parameters or accepts_kwargs:
+            kwargs["failure_context"] = failure_context
+        if ("rag_context" in parameters or accepts_kwargs) and self._rag_context:
+            kwargs["rag_context"] = self._rag_context
+        return target(heats, ladles, cranes, **kwargs)
+
+    def _normalise_llm_result(
+        self,
+        result: Any,
+        heats: list[dict[str, Any]],
+        ladles: list[dict[str, Any]],
+        cranes: list[dict[str, Any]],
+    ) -> tuple[bool, list[dict[str, Any]], dict[str, Any]]:
+        if hasattr(result, "success"):
+            declared_success, assignments = bool(result.success), list(result.assignments)
+            feedback = {"agent_reason": getattr(result, "reason", ""), "trace": result.as_dict() if hasattr(result, "as_dict") else {}}
+        else:
+            declared_success, assignments = result
+            feedback = {}
+        heat_ids = [str(heat["heat_id"]) for heat in heats]
+        returned_ids = [str(row.get("heat_id", "")) for row in assignments]
+        complete = len(returned_ids) == len(heat_ids) and set(returned_ids) == set(heat_ids) and len(set(returned_ids)) == len(returned_ids)
+        validated = self._validator(heats, ladles, cranes, assignments)
+        valid = complete and all(row.get("action") == "assign" for row in validated)
+        for row in validated:
+            row["algorithm"] = "llm_react"
+        feedback["complete"] = complete
+        feedback["validated_actions"] = {str(row["heat_id"]): row["action"] for row in validated}
+        return bool(declared_success) and valid, validated, feedback
+
+    def _frozen_result(
+        self,
+        baseline_assignments: list[dict[str, Any]],
+        affected_heat_ids: list[str],
+    ) -> ResponseResult:
+        """Build the frozen (no reallocation) result."""
+        affected_set = set(affected_heat_ids)
+        frozen = []
+        for a in baseline_assignments:
+            row = dict(a)
+            if str(row.get("heat_id", "")) in affected_set:
+                row["action"] = "unassigned"
+                row["ladle_id"] = None
+                row["crane_id"] = None
+                row["reason"] = "扰动影响，原地硬扛（Frozen）"
+                row["expected_arrival_seconds"] = None
+            frozen.append(row)
+        return ResponseResult(
+            path=ResponsePath.FROZEN,
+            assignments=frozen,
+            success=False,
+            elapsed_seconds=0.0,
+            reason="原地不动硬扛",
+            extra={"algorithm": "frozen"},
+            human_review_required=True,
+        )
+
+    def handle_disturbance(
+        self,
+        scenario: DisturbedScenario,
+    ) -> tuple[ResponseResult, ResponseResult | None]:
+        """Execute the tiered response.
+
+        Returns:
+            (primary_result, llm_result):
+            - primary_result is always the effective response
+            - llm_result is the LLM result (or None if not attempted)
+        """
+        remaining_heats = scenario.heats_needing_reallocation
+
+        if not remaining_heats:
+            # No heats to reallocate, keep baseline
+            result = ResponseResult(
+                    path=ResponsePath.FROZEN,
+                    assignments=scenario.baseline_assignments,
+                    success=True,
+                    elapsed_seconds=0.0,
+                    reason="无受波及炉次",
+                    extra={"algorithm": "frozen"},
+                )
+            self._attach_metrics(result, scenario)
+            return result, None
+
+        # Step 1: Try decision tree rerank
+        dt_result = self._run_decision_tree(
+            remaining_heats,
+            scenario.remaining_ladles,
+            scenario.remaining_cranes,
+            "决策树重排",
+        )
+
+        if dt_result.success:
+            # Decision tree succeeded → merge with frozen assignments
+            merged = _merge_assignments(
+                scenario.frozen_assignments,
+                {str(a["heat_id"]): a for a in dt_result.assignments},
+                list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
+            )
+            dt_result.assignments = merged
+            self._attach_metrics(dt_result, scenario)
+            return dt_result, None
+
+        budget = scenario.remaining_budget_seconds
+        # Older callers may not provide an event coordinate; they retain the
+        # previous non-emergency fallback semantics.
+        if budget is not None:
+            budget = max(0.0, budget - dt_result.elapsed_seconds)
+        dt_result.remaining_budget_seconds = budget
+        dt_result.failure_reasons = [dt_result.reason]
+
+        # Step 2: Decision tree failed → exhausted budget means no LLM call.
+        if scenario.is_emergency or (budget is not None and budget <= 0.0):
+            frozen = self._frozen_result(
+                scenario.baseline_assignments,
+                scenario.affected_heat_ids,
+            )
+            frozen.reason = "时间预算耗尽，决策树失败，Frozen + 呼叫人工"
+            frozen.remaining_budget_seconds = budget
+            frozen.failure_reasons = [dt_result.reason, "budget_exhausted"]
+            self._attach_metrics(frozen, scenario)
+            return frozen, None
+
+        # Step 3: Non-emergency → LLM ReAct
+        llm_result = self._run_llm_react(
+            remaining_heats,
+            scenario.remaining_ladles,
+            scenario.remaining_cranes,
+            budget if budget is not None else float("inf"),
+            {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "event": scenario.audit.get("event", {})},
+        )
+
+        if llm_result.success:
+            merged = _merge_assignments(
+                scenario.frozen_assignments,
+                {str(a["heat_id"]): a for a in llm_result.assignments},
+                list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
+            )
+            llm_result.assignments = merged
+            self._attach_metrics(llm_result, scenario)
+            return llm_result, llm_result
+
+        # Step 4: LLM also failed → Frozen + alarm
+        frozen = self._frozen_result(
+            scenario.baseline_assignments,
+            scenario.affected_heat_ids,
+        )
+        frozen.reason = "决策树+LLM 均失败，Frozen + 告警等人工"
+        frozen.remaining_budget_seconds = llm_result.remaining_budget_seconds
+        frozen.failure_reasons = [dt_result.reason, llm_result.reason]
+        self._attach_metrics(frozen, scenario)
+        return frozen, llm_result
+
+    def run_three_way(
+        self,
+        scenario: DisturbedScenario,
+        scenario_id: str = "1",
+        force_llm_on_success: bool = False,
+    ) -> ThreeWayComparison:
+        """Run and compare all three paths: Frozen, DT, LLM.
+
+        This is for batch experiment evaluation — runs all paths regardless
+        of success/failure.
+        """
+        # Frozen
+        frozen = self._frozen_result(
+            scenario.baseline_assignments,
+            scenario.affected_heat_ids,
+        )
+
+        # Decision Tree rerank
+        remaining_heats = scenario.heats_needing_reallocation
+        if remaining_heats:
+            dt_result = self._run_decision_tree(
+                remaining_heats,
+                scenario.remaining_ladles,
+                scenario.remaining_cranes,
+                "决策树重排",
+            )
+            dt_merged = _merge_assignments(
+                scenario.frozen_assignments,
+                {str(a["heat_id"]): a for a in dt_result.assignments},
+                list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
+            )
+            dt_result.assignments = dt_merged
+        else:
+            dt_result = ResponseResult(
+                path=ResponsePath.DECISION_TREE_SUCCESS,
+                assignments=scenario.baseline_assignments,
+                success=True,
+                elapsed_seconds=0.0,
+                reason="无受波及炉次",
+                extra={"algorithm": "decision_tree"},
+            )
+
+        # LLM ReAct (only if DT failed and we have LLM)
+        llm = None
+        budget = scenario.remaining_budget_seconds
+        if budget is not None:
+            budget = max(0.0, budget - dt_result.elapsed_seconds)
+        if self._llm is not None and remaining_heats and budget != 0.0 and (not dt_result.success or force_llm_on_success):
+            llm_result = self._run_llm_react(
+                remaining_heats,
+                scenario.remaining_ladles,
+                scenario.remaining_cranes,
+                budget if budget is not None else float("inf"),
+                {"decision_tree_failure": dt_result.reason, "affected_heat_ids": scenario.affected_heat_ids, "experimental_forced": force_llm_on_success and dt_result.success},
+            )
+            llm_merged = _merge_assignments(
+                scenario.frozen_assignments,
+                {str(a["heat_id"]): a for a in llm_result.assignments},
+                list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
+            )
+            llm_result.assignments = llm_merged
+            llm = llm_result
+
+        for result in (frozen, dt_result, llm):
+            if result is not None:
+                result.extra.setdefault("event", scenario.audit.get("event", {}))
+                self._attach_metrics(result, scenario)
+
+        return ThreeWayComparison(
+            scenario_id=scenario_id,
+            disturbance_desc=scenario.spec.description,
+            num_affected=scenario.num_affected,
+            num_total=len(scenario.baseline_assignments),
+            frozen=frozen,
+            decision_tree=dt_result,
+            llm_react=llm,
+        )
+
+    @staticmethod
+    def _attach_metrics(result: ResponseResult, scenario: DisturbedScenario) -> None:
+        result.metrics = evaluate_path(
+            scenario.baseline_heats,
+            scenario.baseline_assignments,
+            result.assignments,
+            scenario.affected_heat_ids,
+            result.human_review_required,
+            result.elapsed_seconds,
+        )
+
+
+def _merge_assignments(
+    frozen: dict[str, dict[str, Any]],
+    new_assignments: dict[str, dict[str, Any]],
+    reference_keys: list[str],
+) -> list[dict[str, Any]]:
+    """Merge frozen and new assignments into a complete list."""
+    merged: dict[str, dict[str, Any]] = {}
+    for hid, a in frozen.items():
+        merged[hid] = dict(a)
+    for hid, a in new_assignments.items():
+        # Preserve validated extension fields such as refining routes. The old
+        # projection silently discarded decisions absent from the baseline.
+        merged[hid] = dict(a)
+    return list(merged.values())
