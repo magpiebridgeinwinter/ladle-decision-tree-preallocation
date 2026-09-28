@@ -32,6 +32,42 @@ class ResponsePath(str, Enum):
     CALL_HUMAN = "call_human"
 
 
+class WorkflowStage(str, Enum):
+    """Stages in the production disturbance workflow."""
+
+    SNAPSHOT = "snapshot"
+    SCOPE = "scope"
+    CONTEXT = "context"
+    LLM_PROPOSE = "llm_propose"
+    VALIDATE = "validate"
+    COMPLETED = "completed"
+    DEGRADED = "degraded"
+
+
+@dataclass
+class WorkflowState:
+    """Auditable state for one production disturbance response."""
+
+    stage: WorkflowStage = WorkflowStage.SNAPSHOT
+    configuration_source: str = "unconfigured"
+    budget_status: str = "unknown"
+    failure_reasons: list[str] = field(default_factory=list)
+    transitions: list[str] = field(default_factory=lambda: [WorkflowStage.SNAPSHOT.value])
+
+    def advance(self, stage: WorkflowStage) -> None:
+        self.stage = stage
+        self.transitions.append(stage.value)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "stage": self.stage.value,
+            "configuration_source": self.configuration_source,
+            "budget_status": self.budget_status,
+            "failure_reasons": list(self.failure_reasons),
+            "transitions": list(self.transitions),
+        }
+
+
 @dataclass
 class ResponseResult:
     """Result of a single response attempt."""
@@ -47,6 +83,7 @@ class ResponseResult:
     failure_reasons: list[str] = field(default_factory=list)
     validation_feedback: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)
+    workflow: WorkflowState | None = None
 
     @property
     def num_assigned(self) -> int:
@@ -110,6 +147,7 @@ class ThreeWayComparison:
             "frozen_metrics": self.frozen.metrics,
             "decision_tree_metrics": self.decision_tree.metrics,
             "llm_metrics": self.llm_react.metrics if self.llm_react else None,
+            "workflow": self.llm_react.workflow.as_dict() if self.llm_react and self.llm_react.workflow else None,
         }
 
 
@@ -248,6 +286,28 @@ class TieredResponseController:
             validation_feedback=feedback,
         )
 
+    def _configuration_source(self) -> str:
+        if self._llm is None:
+            return "unconfigured"
+        configured_source = getattr(self._llm, "configuration_source", None)
+        if configured_source:
+            return str(configured_source)
+        if getattr(self._llm, "api_key", None):
+            return "explicit_api_key"
+        if hasattr(self._llm, "api_key"):
+            return "missing_api_key"
+        return "injected_rescheduler"
+
+    @staticmethod
+    def _available_ladles(scenario: DisturbedScenario) -> list[dict[str, Any]]:
+        """Exclude ladles already held by unaffected/frozen assignments."""
+        reserved = {
+            str(row.get("ladle_id"))
+            for row in scenario.frozen_assignments.values()
+            if row.get("action") == "assign" and row.get("ladle_id")
+        }
+        return [row for row in scenario.remaining_ladles if str(row.get("ladle_id")) not in reserved]
+
     def _invoke_llm(
         self,
         heats: list[dict[str, Any]],
@@ -292,19 +352,22 @@ class TieredResponseController:
         feedback["validated_actions"] = {str(row["heat_id"]): row["action"] for row in validated}
         return bool(declared_success) and valid, validated, feedback
 
-    @staticmethod
     def _failure_context(
+        self,
         scenario: DisturbedScenario,
         decision_tree: ResponseResult,
         budget: float | None,
     ) -> dict[str, Any]:
         """Build the bounded, credential-free context passed to LLM adapters."""
         return {
+            "workflow_entry_reason": decision_tree.reason,
+            # Keep legacy aliases for consumers that parse old audit files.
             "decision_tree_failure": decision_tree.reason,
-            "decision_tree_actions": {
+            "baseline_actions": {
                 str(row.get("heat_id", "")): row.get("action")
                 for row in decision_tree.assignments
             },
+            "decision_tree_actions": {},
             "affected_heat_ids": list(scenario.affected_heat_ids),
             "excluded_locked_heat_ids": list(scenario.excluded_heat_ids),
             "remaining_budget_seconds": budget,
@@ -323,7 +386,7 @@ class TieredResponseController:
                         key: ladle.get(key)
                         for key in ("ladle_id", "grade", "position_m", "position_code", "location_mapping_status", "weight_tonnes", "age_seconds", "max_age_seconds")
                     }
-                    for ladle in scenario.remaining_ladles
+                    for ladle in self._available_ladles(scenario)
                 ],
                 "cranes": [
                     {
@@ -374,6 +437,13 @@ class TieredResponseController:
             - llm_result is the LLM result (or None if not attempted)
         """
         remaining_heats = scenario.heats_needing_reallocation
+        workflow = WorkflowState(configuration_source=self._configuration_source())
+        workflow.advance(WorkflowStage.SCOPE)
+        workflow.budget_status = (
+            "unbounded" if scenario.remaining_budget_seconds is None
+            else "available" if scenario.remaining_budget_seconds > 0
+            else "exhausted"
+        )
 
         if not remaining_heats:
             # No heats to reallocate, keep baseline
@@ -384,61 +454,48 @@ class TieredResponseController:
                     elapsed_seconds=0.0,
                     reason="无受波及炉次",
                     extra={"algorithm": "frozen"},
+                    workflow=workflow,
                 )
+            workflow.advance(WorkflowStage.COMPLETED)
             self._attach_metrics(result, scenario)
             return result, None
 
-        # Step 1: Try decision tree rerank
-        dt_result = self._run_decision_tree(
-            remaining_heats,
-            scenario.remaining_ladles,
-            scenario.remaining_cranes,
-            "决策树重排",
-        )
-
-        if dt_result.success:
-            # Decision tree succeeded → merge with frozen assignments
-            merged = _merge_assignments(
-                scenario.frozen_assignments,
-                {str(a["heat_id"]): a for a in dt_result.assignments},
-                list(scenario.baseline_assignments[0].keys()) if scenario.baseline_assignments else [],
-            )
-            dt_result.assignments = merged
-            if _preserves_unaffected(merged, scenario.baseline_assignments, scenario.affected_heat_ids):
-                self._attach_metrics(dt_result, scenario)
-                return dt_result, None
-            dt_result.success = False
-            dt_result.path = ResponsePath.DECISION_TREE_FAILURE
-            dt_result.reason = "决策树合并结果修改了影响范围外炉次"
-
+        workflow.advance(WorkflowStage.CONTEXT)
         budget = scenario.remaining_budget_seconds
-        # Older callers may not provide an event coordinate; they retain the
-        # previous non-emergency fallback semantics.
-        if budget is not None:
-            budget = max(0.0, budget - dt_result.elapsed_seconds)
-        dt_result.remaining_budget_seconds = budget
-        dt_result.failure_reasons = [dt_result.reason]
-
-        # Step 2: Decision tree failed → exhausted budget means no LLM call.
+        available_ladles = self._available_ladles(scenario)
+        # The production path enters the LLM workflow directly. A zero budget
+        # remains a hard safety gate and is degraded without making a network call.
         if scenario.is_emergency or (budget is not None and budget <= 0.0):
+            workflow.failure_reasons.append("budget_exhausted")
+            workflow.advance(WorkflowStage.DEGRADED)
             frozen = self._frozen_result(
                 scenario.baseline_assignments,
                 scenario.affected_heat_ids,
             )
-            frozen.reason = "时间预算耗尽，决策树失败，Frozen + 呼叫人工"
+            frozen.reason = "突发场景未能在安全预算内进入 LLM，Frozen + 呼叫人工"
             frozen.remaining_budget_seconds = budget
-            frozen.failure_reasons = [dt_result.reason, "budget_exhausted"]
+            frozen.failure_reasons = ["direct_llm_workflow_budget_exhausted", "budget_exhausted"]
+            frozen.workflow = workflow
             self._attach_metrics(frozen, scenario)
             return frozen, None
 
-        # Step 3: Non-emergency → LLM ReAct
+        workflow.advance(WorkflowStage.LLM_PROPOSE)
+        direct_context = ResponseResult(
+            path=ResponsePath.DECISION_TREE_FAILURE,
+            assignments=[],
+            success=False,
+            elapsed_seconds=0.0,
+            reason="突发场景直接进入 LLM Workflow，未执行决策树重排",
+        )
         llm_result = self._run_llm_react(
             remaining_heats,
-            scenario.remaining_ladles,
+            available_ladles,
             scenario.remaining_cranes,
             budget if budget is not None else float("inf"),
-            self._failure_context(scenario, dt_result, budget),
+            self._failure_context(scenario, direct_context, budget),
         )
+        llm_result.workflow = workflow
+        workflow.advance(WorkflowStage.VALIDATE)
 
         if llm_result.success:
             merged = _merge_assignments(
@@ -448,21 +505,25 @@ class TieredResponseController:
             )
             llm_result.assignments = merged
             if _preserves_unaffected(merged, scenario.baseline_assignments, scenario.affected_heat_ids):
+                workflow.advance(WorkflowStage.COMPLETED)
                 self._attach_metrics(llm_result, scenario)
                 return llm_result, llm_result
             llm_result.success = False
             llm_result.path = ResponsePath.LLM_REACT_FAILURE
             llm_result.reason = "LLM 合并结果修改了影响范围外炉次"
             llm_result.failure_reasons = ["unaffected_assignment_changed"]
+            workflow.failure_reasons.append("unaffected_assignment_changed")
 
-        # Step 4: LLM also failed → Frozen + alarm
+        workflow.failure_reasons.extend(llm_result.failure_reasons or [llm_result.reason])
+        workflow.advance(WorkflowStage.DEGRADED)
         frozen = self._frozen_result(
             scenario.baseline_assignments,
             scenario.affected_heat_ids,
         )
-        frozen.reason = "决策树+LLM 均失败，Frozen + 告警等人工"
+        frozen.reason = "LLM Workflow 失败，Frozen + 告警等人工"
         frozen.remaining_budget_seconds = llm_result.remaining_budget_seconds
-        frozen.failure_reasons = [dt_result.reason, llm_result.reason]
+        frozen.failure_reasons = ["llm_workflow_failed", llm_result.reason]
+        frozen.workflow = workflow
         self._attach_metrics(frozen, scenario)
         return frozen, llm_result
 
@@ -485,10 +546,11 @@ class TieredResponseController:
 
         # Decision Tree rerank
         remaining_heats = scenario.heats_needing_reallocation
+        available_ladles = self._available_ladles(scenario)
         if remaining_heats:
             dt_result = self._run_decision_tree(
                 remaining_heats,
-                scenario.remaining_ladles,
+                available_ladles,
                 scenario.remaining_cranes,
                 "决策树重排",
             )
@@ -516,7 +578,7 @@ class TieredResponseController:
         if self._llm is not None and remaining_heats and not scenario.is_emergency and (budget is None or budget > 0.0) and (not dt_result.success or force_llm_on_success):
             llm_result = self._run_llm_react(
                 remaining_heats,
-                scenario.remaining_ladles,
+                available_ladles,
                 scenario.remaining_cranes,
                 budget if budget is not None else float("inf"),
                 {**self._failure_context(scenario, dt_result, budget), "experimental_forced": force_llm_on_success and dt_result.success},
@@ -586,11 +648,23 @@ def _preserves_unaffected(
     affected = set(affected_heat_ids)
     by_heat = {str(row.get("heat_id", "")): row for row in merged}
     protected_fields = ("ladle_id", "crane_id", "refining_route", "action")
+    reserved_ladles: set[str] = set()
     for original in baseline:
         heat_id = str(original.get("heat_id", ""))
         if heat_id in affected:
             continue
         candidate = by_heat.get(heat_id)
         if candidate is None or any(candidate.get(field) != original.get(field) for field in protected_fields):
+            return False
+        ladle_id = str(candidate.get("ladle_id") or "")
+        if candidate.get("action") == "assign" and ladle_id:
+            reserved_ladles.add(ladle_id)
+    for heat_id, candidate in by_heat.items():
+        if heat_id not in affected:
+            continue
+        ladle_id = str(candidate.get("ladle_id") or "")
+        if candidate.get("action") != "assign" or not ladle_id:
+            continue
+        if ladle_id in reserved_ladles:
             return False
     return True

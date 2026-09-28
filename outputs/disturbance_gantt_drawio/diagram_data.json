@@ -108,6 +108,18 @@
       "external_api_called": false
     }
   },
+  "comparison_summary": {
+    "counts": {
+      "AQ失效，AR补全": 1,
+      "AQ与AR完全相同": 2,
+      "钢包、行车均不同": 26,
+      "行车相同，钢包不同": 1,
+      "钢包相同，行车不同": 1
+    },
+    "same_count": 2,
+    "different_count": 29,
+    "interpretation": "时间条相同只表示计划窗口未变；AQ与AR的钢包、行车字段需要逐炉比较。"
+  },
   "full_schedule": [
     {
       "element_key": "plan_DT3853D8-300664",
@@ -10761,11 +10773,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST36 / 1520"
       },
       "decision_tree": {
         "ladle_id": null,
         "crane_id": null,
+        "refining_route": null,
         "display": "未分配",
         "assigned": false,
         "changed": true,
@@ -10774,12 +10788,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": "A1",
         "display": "ST36 / 1520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树未分配，Codex补全",
+      "comparison_kind": "AQ失效，AR补全",
       "changed_by": [
         "decision_tree"
       ],
@@ -10804,11 +10820,13 @@
       "baseline": {
         "ladle_id": "ST07",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST07 / 2520"
       },
       "decision_tree": {
         "ladle_id": "ST07",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST07 / 2520",
         "assigned": true,
         "changed": false,
@@ -10817,12 +10835,14 @@
       "codex": {
         "ladle_id": "ST07",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST07 / 2520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "保持原计划",
+      "comparison_kind": "AQ与AR完全相同",
       "changed_by": [],
       "audit_change": null,
       "validation_status": {
@@ -10845,11 +10865,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170"
       },
       "decision_tree": {
         "ladle_id": "ST27",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST27 / 1170",
         "assigned": true,
         "changed": true,
@@ -10858,12 +10880,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -10888,11 +10912,13 @@
       "baseline": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170"
       },
       "decision_tree": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": true,
@@ -10901,12 +10927,14 @@
       "codex": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -10931,11 +10959,13 @@
       "baseline": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170"
       },
       "decision_tree": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": true,
@@ -10944,12 +10974,14 @@
       "codex": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -10974,11 +11006,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520"
       },
       "decision_tree": {
         "ladle_id": "ST04",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST04 / 2170",
         "assigned": true,
         "changed": true,
@@ -10987,12 +11021,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11017,11 +11053,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST09 / 3170"
       },
       "decision_tree": {
         "ladle_id": "ST06",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST06 / 1520",
         "assigned": true,
         "changed": true,
@@ -11030,12 +11068,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST09 / 3170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11060,11 +11100,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST09 / 3170"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST15 / 3170",
         "assigned": true,
         "changed": true,
@@ -11073,12 +11115,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST09 / 3170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "行车相同，钢包不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11103,11 +11147,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "2500",
+        "refining_route": null,
         "display": "ST36 / 2500"
       },
       "decision_tree": {
         "ladle_id": "ST03",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST03 / 1520",
         "assigned": true,
         "changed": true,
@@ -11116,12 +11162,14 @@
       "codex": {
         "ladle_id": "ST15",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST15 / 2520",
         "assigned": true,
         "changed": true,
         "reason": "Codex 独立重排：行车 2500 离线，为炉次 DT0142D1-300759 "
       },
       "status": "Codex改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree",
         "codex"
@@ -11155,11 +11203,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST15 / 3520",
         "assigned": true,
         "changed": true,
@@ -11168,12 +11218,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11198,11 +11250,13 @@
       "baseline": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170"
       },
       "decision_tree": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": true,
@@ -11211,12 +11265,14 @@
       "codex": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11241,11 +11297,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170"
       },
       "decision_tree": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": true,
@@ -11254,12 +11312,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11284,11 +11344,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520"
       },
       "decision_tree": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": true,
@@ -11297,12 +11359,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11327,11 +11391,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520"
       },
       "decision_tree": {
         "ladle_id": "ST27",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST27 / 1170",
         "assigned": true,
         "changed": true,
@@ -11340,12 +11406,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11370,11 +11438,13 @@
       "baseline": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170"
       },
       "decision_tree": {
         "ladle_id": "ST08",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST08 / 1520",
         "assigned": true,
         "changed": true,
@@ -11383,12 +11453,14 @@
       "codex": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11413,11 +11485,13 @@
       "baseline": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170"
       },
       "decision_tree": {
         "ladle_id": "ST08",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST08 / 1520",
         "assigned": true,
         "changed": true,
@@ -11426,12 +11500,14 @@
       "codex": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11456,11 +11532,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "2500",
+        "refining_route": null,
         "display": "ST36 / 2500"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST15 / 3520",
         "assigned": true,
         "changed": true,
@@ -11469,12 +11547,14 @@
       "codex": {
         "ladle_id": "ST27",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST27 / 1170",
         "assigned": true,
         "changed": true,
         "reason": "Codex 独立重排：行车 2500 离线，为炉次 DT0143D8-300767 "
       },
       "status": "Codex改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree",
         "codex"
@@ -11508,11 +11588,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST36 / 1520"
       },
       "decision_tree": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": true,
@@ -11521,12 +11603,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST36 / 1520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11551,11 +11635,13 @@
       "baseline": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170"
       },
       "decision_tree": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": true,
@@ -11564,12 +11650,14 @@
       "codex": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11594,11 +11682,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST15 / 3520",
         "assigned": true,
         "changed": true,
@@ -11607,12 +11697,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11637,11 +11729,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST15 / 3170",
         "assigned": true,
         "changed": true,
@@ -11650,12 +11744,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11680,11 +11776,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520"
       },
       "decision_tree": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": true,
@@ -11693,12 +11791,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11723,11 +11823,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST36 / 1520"
       },
       "decision_tree": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": true,
@@ -11736,12 +11838,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST36 / 1520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11766,11 +11870,13 @@
       "baseline": {
         "ladle_id": "ST02",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST02 / 3170"
       },
       "decision_tree": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": true,
@@ -11779,12 +11885,14 @@
       "codex": {
         "ladle_id": "ST02",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST02 / 3170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11809,11 +11917,13 @@
       "baseline": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170"
       },
       "decision_tree": {
         "ladle_id": "ST08",
         "crane_id": "1520",
+        "refining_route": null,
         "display": "ST08 / 1520",
         "assigned": true,
         "changed": true,
@@ -11822,12 +11932,14 @@
       "codex": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11852,11 +11964,13 @@
       "baseline": {
         "ladle_id": "ST36",
         "crane_id": "2500",
+        "refining_route": null,
         "display": "ST36 / 2500"
       },
       "decision_tree": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": true,
@@ -11865,12 +11979,14 @@
       "codex": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": true,
         "reason": "Codex 独立重排：行车 2500 离线，为炉次 DT0164D1-300776 "
       },
       "status": "Codex改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree",
         "codex"
@@ -11904,11 +12020,13 @@
       "baseline": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170"
       },
       "decision_tree": {
         "ladle_id": "ST36",
         "crane_id": "4170",
+        "refining_route": null,
         "display": "ST36 / 4170",
         "assigned": true,
         "changed": true,
@@ -11917,12 +12035,14 @@
       "codex": {
         "ladle_id": "ST19",
         "crane_id": "2170",
+        "refining_route": null,
         "display": "ST19 / 2170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -11947,11 +12067,13 @@
       "baseline": {
         "ladle_id": "ST07",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST07 / 3520"
       },
       "decision_tree": {
         "ladle_id": "ST07",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST07 / 3520",
         "assigned": true,
         "changed": false,
@@ -11960,12 +12082,14 @@
       "codex": {
         "ladle_id": "ST07",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST07 / 3520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "保持原计划",
+      "comparison_kind": "AQ与AR完全相同",
       "changed_by": [],
       "audit_change": null,
       "validation_status": {
@@ -11988,11 +12112,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520"
       },
       "decision_tree": {
         "ladle_id": "ST15",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST15 / 3170",
         "assigned": true,
         "changed": true,
@@ -12001,12 +12127,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "3520",
+        "refining_route": null,
         "display": "ST09 / 3520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -12031,11 +12159,13 @@
       "baseline": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520"
       },
       "decision_tree": {
         "ladle_id": "ST51",
         "crane_id": "1170",
+        "refining_route": null,
         "display": "ST51 / 1170",
         "assigned": true,
         "changed": true,
@@ -12044,12 +12174,14 @@
       "codex": {
         "ladle_id": "ST09",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST09 / 2520",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包、行车均不同",
       "changed_by": [
         "decision_tree"
       ],
@@ -12074,11 +12206,13 @@
       "baseline": {
         "ladle_id": "ST02",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST02 / 3170"
       },
       "decision_tree": {
         "ladle_id": "ST02",
         "crane_id": "2520",
+        "refining_route": null,
         "display": "ST02 / 2520",
         "assigned": true,
         "changed": true,
@@ -12087,12 +12221,14 @@
       "codex": {
         "ladle_id": "ST02",
         "crane_id": "3170",
+        "refining_route": null,
         "display": "ST02 / 3170",
         "assigned": true,
         "changed": false,
         "reason": "规则决策树→真实行车距离/作业均衡→硬约束终检→本次转运后钢包释放"
       },
       "status": "决策树改配",
+      "comparison_kind": "钢包相同，行车不同",
       "changed_by": [
         "decision_tree"
       ],

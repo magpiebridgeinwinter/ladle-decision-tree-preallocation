@@ -16,6 +16,7 @@ from ladle_preallocation.disturbance import (
 from ladle_preallocation.response import (
     ResponsePath,
     TieredResponseController,
+    WorkflowStage,
 )
 from ladle_preallocation.llm import ReActRescheduler
 from ladle_preallocation.experiment import BatchConfig, BatchRunner
@@ -156,6 +157,76 @@ class TestDisturbanceInjector:
 # ---------------------------------------------------------------------------
 
 class TestTieredResponseController:
+
+    def test_disturbance_enters_llm_without_decision_tree(self, baseline):
+        heats, ladles, cranes, assignments = baseline
+        scenario = inject_disturbance(
+            DisturbanceSpec(kind="crane_offline", resource_id="C1", description="C1 离线"),
+            heats,
+            ladles,
+            cranes,
+            assignments,
+        )
+        calls = []
+
+        def llm(_heats, _ladles, _cranes, **_kwargs):
+            calls.append(True)
+            return False, []
+
+        controller = TieredResponseController(llm)
+        controller._run_decision_tree = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("production workflow must not call decision tree"))
+        result, llm_result = controller.handle_disturbance(scenario)
+
+        assert calls == [True]
+        assert llm_result is not None
+        assert result.path == ResponsePath.FROZEN
+        assert result.workflow is not None
+        assert WorkflowStage.LLM_PROPOSE.value in result.workflow.transitions
+        assert result.workflow.stage == WorkflowStage.DEGRADED
+
+    def test_workflow_budget_gate_skips_llm(self, baseline):
+        heats, ladles, cranes, assignments = baseline
+        heats[0]["window_end"] = 50.0
+        heats[1]["window_end"] = 80.0
+        scenario = inject_disturbance(
+            DisturbanceSpec(kind="crane_offline", resource_id="C1", description="紧急"),
+            heats,
+            ladles,
+            cranes,
+            assignments,
+        )
+        calls = []
+        result, llm_result = TieredResponseController(lambda *_args, **_kwargs: calls.append(True)).handle_disturbance(scenario)
+
+        assert result.path == ResponsePath.FROZEN
+        assert llm_result is None
+        assert calls == []
+        assert result.workflow is not None
+        assert result.workflow.stage == WorkflowStage.DEGRADED
+        assert "budget_exhausted" in result.workflow.failure_reasons
+
+    def test_workflow_rejects_ladle_reuse_with_frozen_heat(self, multi_crane_baseline):
+        heats, ladles, cranes, assignments = multi_crane_baseline
+        scenario = inject_disturbance(
+            DisturbanceSpec(kind="crane_offline", resource_id="C1", description="C1 离线"),
+            heats,
+            ladles,
+            cranes,
+            assignments,
+        )
+
+        def llm(_heats, _ladles, _cranes, **_kwargs):
+            # Reuses L2, which is held by unaffected H2.
+            return True, [
+                {"heat_id": "H1", "ladle_id": "L2", "crane_id": "C2", "action": "assign"},
+                {"heat_id": "H3", "ladle_id": "L2", "crane_id": "C2", "action": "assign"},
+            ]
+
+        result, llm_result = TieredResponseController(llm).handle_disturbance(scenario)
+
+        assert llm_result is not None
+        assert result.path == ResponsePath.FROZEN
+        assert "invalid_or_incomplete_llm_proposal" in llm_result.failure_reasons
 
     def test_no_heats_to_reallocate_keeps_all(self, baseline):
         heats, ladles, cranes, assignments = baseline

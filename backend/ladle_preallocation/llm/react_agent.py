@@ -221,6 +221,7 @@ class ReActRescheduler:
         verbose: bool = False,
         llm_call: Any = _call_llm,
         clock: Any = time.perf_counter,
+        configuration_source: str | None = None,
     ):
         self.api_base = api_base
         self.api_key = api_key or ""
@@ -230,6 +231,7 @@ class ReActRescheduler:
         self.verbose = verbose
         self._llm_call = llm_call
         self._clock = clock
+        self.configuration_source = configuration_source or ("explicit_api_key" if self.api_key else "unconfigured")
 
     def reschedule(
         self,

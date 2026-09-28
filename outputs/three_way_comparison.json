@@ -14,7 +14,7 @@
     "llm_success_rate": null,
     "llm_total_saved_over_dt": 0,
     "llm_total_saved_over_frozen": 0,
-    "dt_avg_elapsed_ms": 0.11356900601337354,
+    "dt_avg_elapsed_ms": 0.08538931918640931,
     "llm_avg_elapsed_s": null,
     "frozen_metrics": {
       "on_time_rate": 0.0,
@@ -34,7 +34,7 @@
       "changed_heats": 1.3333333333333333,
       "human_review_rate": 0.0,
       "rule_violations": 0.0,
-      "decision_seconds": 0.00011356900601337354
+      "decision_seconds": 8.538931918640931e-05
     },
     "llm_metrics": {
       "on_time_rate": null,
@@ -88,9 +88,10 @@
         "changed_heats": 2,
         "human_review_rate": 0.0,
         "rule_violations": 0,
-        "decision_seconds": 0.00017145799938589334
+        "decision_seconds": 0.00016895891167223454
       },
-      "llm_metrics": null
+      "llm_metrics": null,
+      "workflow": null
     },
     {
       "scenario_id": "scenario_002",
@@ -101,7 +102,7 @@
       "dt_assigned": 3,
       "dt_saved": 1,
       "dt_path": "decision_tree_success",
-      "dt_elapsed_s": 0.0001,
+      "dt_elapsed_s": 0.0,
       "llm_assigned": null,
       "llm_saved_over_dt": null,
       "llm_saved_over_frozen": null,
@@ -132,9 +133,10 @@
         "changed_heats": 1,
         "human_review_rate": 0.0,
         "rule_violations": 0,
-        "decision_seconds": 8.395803160965443e-05
+        "decision_seconds": 4.575005732476711e-05
       },
-      "llm_metrics": null
+      "llm_metrics": null,
+      "workflow": null
     },
     {
       "scenario_id": "scenario_003",
@@ -145,7 +147,7 @@
       "dt_assigned": 3,
       "dt_saved": 1,
       "dt_path": "decision_tree_success",
-      "dt_elapsed_s": 0.0001,
+      "dt_elapsed_s": 0.0,
       "llm_assigned": null,
       "llm_saved_over_dt": null,
       "llm_saved_over_frozen": null,
@@ -176,9 +178,10 @@
         "changed_heats": 1,
         "human_review_rate": 0.0,
         "rule_violations": 0,
-        "decision_seconds": 8.529098704457283e-05
+        "decision_seconds": 4.1458988562226295e-05
       },
-      "llm_metrics": null
+      "llm_metrics": null,
+      "workflow": null
     }
   ]
 }

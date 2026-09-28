@@ -42,22 +42,22 @@ def test_real_stress_scenario_generates_traceable_drawio() -> None:
         changed = [row["heat_id"] for row in diagram_data["heat_rows"] if row["codex"]["changed"]]
         assert changed == ["DT0142D1-300759", "DT0143D8-300767", "DT0164D1-300776"]
         assert all(diagram_data["scenario_id"] in row["element_key"] for row in diagram_data["heat_rows"])
-        assert all(name in drawio for name in ("01-离线前受影响炉次", "02-离线后受影响炉次"))
+        assert all(name in drawio for name in ("01-决策树重排-1炉失效", "02-Codex重排-补全失效炉次"))
         assert "2026-03-06 21:15:00" not in drawio
         assert "2026-03" not in drawio and "2026-03-07" not in drawio
         assert "真实时间" not in drawio and "演示标签" not in drawio
         assert "10:00" in drawio and "20:00" in drawio and "11:00" in drawio
         assert "行车 2500" in drawio and "Codex" in drawio
         assert drawio.count('id="schedule_badge_') == 62
-        assert drawio.count("CODEX 改配") >= 3
-        assert drawio.count('id="codex_row_') == 3
-        assert drawio.count('id="codex_change_') == 3
-        assert "AP ST36 / 2500 → AR ST15 / 2520" in drawio
-        assert "AP ST36 / 2500 → AR ST27 / 1170" in drawio
-        assert "AP ST36 / 2500 → AR ST36 / 4170" in drawio
-        assert drawio.count("保持原计划") >= 28
+        assert drawio.count('value="决策树失效"') == 1
+        assert drawio.count('value="CODEX 补全"') == 1
+        assert drawio.count('id="focus_row_') == 2
+        assert drawio.count('id="focus_change_') == 2
+        assert "决策树未完成：钢包、行车均未分配" in drawio
+        assert "Codex 已补全：ST36 / 1520 / 路线 A1" in drawio
+        assert "JU6310E7-300751" in drawio
         assert drawio.count('id="schedule_bar_') == 62
-        assert "此前/此后正常计划共 426 炉" in drawio
+        assert "同一事故、同一 31 炉窗口、同一时间轴" in drawio
 
 
 def test_invalid_audit_fails_without_partial_output() -> None:

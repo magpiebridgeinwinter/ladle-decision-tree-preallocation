@@ -39,9 +39,17 @@ COLORS = {
     "blue_tint": "#eaf1ff",
     "green": "#3c7a57",
     "green_tint": "#eaf5ee",
+    "yellow": "#c99700",
+    "yellow_tint": "#fff8d8",
     "danger": "#b94747",
     "danger_tint": "#fff0f0",
 }
+
+
+def _comparison_colors(kind: str) -> tuple[str, str]:
+    if kind == "AQ与AR完全相同":
+        return COLORS["green"], COLORS["green_tint"]
+    return COLORS["yellow"], COLORS["yellow_tint"]
 
 
 def fail(message: str) -> None:
@@ -102,6 +110,23 @@ def _short_reason(row: dict[str, Any] | None) -> str:
         return "、".join(str(item) for item in violations[:2])
     reason = str(row.get("reason") or "").strip()
     return reason[:42] if reason else "通过"
+
+
+def _comparison_kind(decision_tree: dict[str, Any] | None, codex: dict[str, Any] | None) -> str:
+    """Classify the AQ/AR result so the visual comparison is explicit."""
+    aq = _assignment_pair(decision_tree)
+    ar = _assignment_pair(codex)
+    if aq == ar:
+        return "AQ与AR完全相同"
+    if aq == (None, None) and ar != (None, None):
+        return "AQ失效，AR补全"
+    if aq[0] == ar[0] and aq[1] != ar[1]:
+        return "钢包相同，行车不同"
+    if aq[0] != ar[0] and aq[1] == ar[1]:
+        return "行车相同，钢包不同"
+    if aq != (None, None) and ar != (None, None):
+        return "钢包、行车均不同"
+    return "分配状态不同"
 
 
 def _display_window(
@@ -300,10 +325,11 @@ def build_diagram_data(audit: dict[str, Any], source_path: Path) -> dict[str, An
             "source_pour_at": heat.get("pour_at"),
             "plan_start_at": _precise_time_label(_source_datetime(origin, heat.get("window_start"))),
             "plan_end_at": _precise_time_label(_source_datetime(origin, heat.get("window_end"))),
-            "baseline": {"ladle_id": _assignment_pair(base_row)[0], "crane_id": _assignment_pair(base_row)[1], "display": _assignment_text(base_row)},
-            "decision_tree": {"ladle_id": _assignment_pair(dt_row)[0], "crane_id": _assignment_pair(dt_row)[1], "display": _assignment_text(dt_row), "assigned": dt_assigned, "changed": dt_changed, "reason": _short_reason(dt_row)},
-            "codex": {"ladle_id": _assignment_pair(llm_row)[0], "crane_id": _assignment_pair(llm_row)[1], "display": _assignment_text(llm_row), "assigned": codex_assigned, "changed": codex_changed, "reason": _short_reason(llm_row)},
+            "baseline": {"ladle_id": _assignment_pair(base_row)[0], "crane_id": _assignment_pair(base_row)[1], "refining_route": base_row.get("refining_route"), "display": _assignment_text(base_row)},
+            "decision_tree": {"ladle_id": _assignment_pair(dt_row)[0], "crane_id": _assignment_pair(dt_row)[1], "refining_route": dt_row.get("refining_route"), "display": _assignment_text(dt_row), "assigned": dt_assigned, "changed": dt_changed, "reason": _short_reason(dt_row)},
+            "codex": {"ladle_id": _assignment_pair(llm_row)[0], "crane_id": _assignment_pair(llm_row)[1], "refining_route": llm_row.get("refining_route"), "display": _assignment_text(llm_row), "assigned": codex_assigned, "changed": codex_changed, "reason": _short_reason(llm_row)},
             "status": status,
+            "comparison_kind": _comparison_kind(dt_row, llm_row),
             "changed_by": [name for name, changed in (("decision_tree", dt_changed), ("codex", codex_changed)) if changed],
             "audit_change": changed_by_audit.get(heat_id),
             "validation_status": {
@@ -319,6 +345,10 @@ def build_diagram_data(audit: dict[str, Any], source_path: Path) -> dict[str, An
 
     dt_result = audit.get("decision_tree") or {}
     codex_result = audit.get("codex_llm") or {}
+    comparison_counts: dict[str, int] = {}
+    for row in heat_output:
+        kind = row["comparison_kind"]
+        comparison_counts[kind] = comparison_counts.get(kind, 0) + 1
     full_schedule = _full_plan_rows(source_audit, baseline, {row["heat_id"]: row for row in heat_output}, codex, origin)
     full_start = min(row["start_at"] for row in full_schedule if row["start_at"])
     full_end = max(row["end_at"] for row in full_schedule if row["end_at"])
@@ -382,6 +412,12 @@ def build_diagram_data(audit: dict[str, Any], source_path: Path) -> dict[str, An
             "baseline": {"heat_count": len(affected_ids), "source": "AP / baseline_full_assignments"},
             "decision_tree": {"assigned": dt_result.get("num_assigned"), "success": dt_result.get("success"), "path": dt_result.get("path"), "metrics": dt_result.get("metrics") or {}},
             "codex": {"assigned": codex_result.get("num_assigned"), "success": codex_result.get("success"), "path": codex_result.get("path"), "metrics": codex_result.get("metrics") or {}, "external_api_called": (audit.get("llm_invocation") or {}).get("external_api_called")},
+        },
+        "comparison_summary": {
+            "counts": comparison_counts,
+            "same_count": comparison_counts.get("AQ与AR完全相同", 0),
+            "different_count": len(heat_output) - comparison_counts.get("AQ与AR完全相同", 0),
+            "interpretation": "时间条相同只表示计划窗口未变；AQ与AR的钢包、行车字段需要逐炉比较。",
         },
         "full_schedule": full_schedule,
         "heat_rows": heat_output,
@@ -453,7 +489,7 @@ def _add_header(root: ET.Element, title: str, subtitle: str, width: int) -> None
 
 def _add_legend(root: ET.Element, y: int, width: int) -> None:
     _add_cell(root, "legend_rule", "", f"line;strokeColor={COLORS['rule']};strokeWidth=1;", x=40, y=y, width=width - 80, height=1)
-    entries = [("AP 原计划", COLORS["muted"]), ("AQ 决策树", COLORS["blue"]), ("AR Codex", COLORS["accent"]), ("事故/失败", COLORS["danger"])]
+    entries = [("AQ=AR", COLORS["green"]), ("AQ≠AR", COLORS["yellow"]), ("决策树失效", COLORS["danger"]), ("Codex补全", COLORS["accent"])]
     x = 48
     for idx, (label, color) in enumerate(entries):
         _add_cell(root, f"legend_{idx}", label, _box_style(color, color, 10, True), x=x, y=y + 16, width=108, height=26)
@@ -581,44 +617,46 @@ def _add_schedule_axis(root: ET.Element, data: dict[str, Any], *, start: float, 
     _add_cell(root, "axis_caption", "演示生产时间", _text_style(10, COLORS["muted"], True), x=40, y=top - 28, width=left - 56, height=22)
 
 
-def _schedule_page(data: dict[str, Any], *, post_event: bool) -> ET.Element:
+def _schedule_page(data: dict[str, Any], *, branch: str) -> ET.Element:
+    if branch not in {"decision_tree", "codex"}:
+        fail(f"unknown schedule branch: {branch}")
     rows = _affected_schedule_rows(data)
+    heat_details = {row["heat_id"]: row for row in data["heat_rows"]}
     start = float(data["time_axis"]["display_start_minute"])
     end = float(data["time_axis"]["display_end_minute"])
     width = 1840
     left = 540
     chart_width = 1240
-    top = 240
-    row_height = 40
+    top = 250
+    row_height = 54
     bottom = top + len(rows) * row_height
     height = bottom + 120
-    page_name = "02-离线后受影响炉次" if post_event else "01-离线前受影响炉次"
-    page_id = "post-event-plan" if post_event else "pre-event-plan"
+    is_codex_page = branch == "codex"
+    page_name = "02-Codex重排-补全失效炉次" if is_codex_page else "01-决策树重排-1炉失效"
+    page_id = "codex-reschedule" if is_codex_page else "decision-tree-reschedule"
     diagram, root = _new_page(page_name, page_id, width, height)
-    title = "行车离线后：受影响炉次重排结果" if post_event else "行车离线前：受影响炉次原计划"
-    subtitle = (
-        f"仅展开 {len(rows)} 个受影响炉次 · 演示生产时间 10:00–20:00 · 其余 {len(data['full_schedule']) - len(rows)} 炉省略"
-        if not post_event else
-        f"仅展开 {len(rows)} 个受影响炉次 · 事故 11:00 · Codex 改配 {sum(1 for row in rows if row['status'] == 'Codex改配')} 炉"
-    )
+    assigned = data["branch_summary"][branch]["assigned"]
+    title = "图 2  Codex 重排：补全决策树失效炉次" if is_codex_page else "图 1  决策树重排：1 个炉次未完成分配"
+    subtitle = f"同一事故、同一 31 炉窗口、同一时间轴 · {'AR Codex' if is_codex_page else 'AQ 决策树'} 完成 {assigned}/31"
     _add_header(root, title, subtitle, width)
-    context = f"此前/此后正常计划共 {len(data['full_schedule']) - len(rows)} 炉，未受本次扰动影响，图中省略。"
-    if post_event:
-        context += " 蓝色标签＝受扰动但保持计划；红色整行＝Codex 改配。"
+    context = (
+        "阅读重点：与图 1 对照同一行 JU6310E7-300751。Codex 给出 ST36 / 行车 1520 / 精炼路线 A1，并通过检查。"
+        if is_codex_page else
+        "阅读重点：JU6310E7-300751 显示为红色缺口。决策树未完成钢包和行车分配，原因是缺少精炼路线。"
+    )
     _add_cell(root, "omitted_context", context, _box_style(COLORS["paper"], COLORS["rule"], 10, False, "left"), x=40, y=100, width=left + chart_width - 40, height=36)
-    if post_event:
-        event_minute = float(data["time_axis"]["display_event_minute"])
-        event_x = _chart_x(event_minute, start, end, left, chart_width)
-        _add_cell(root, "offline_line", "", f"line;strokeColor={COLORS['danger']};strokeWidth=3;dashed=1;", x=event_x, y=top - 20, width=2, height=bottom - top + 20)
-        label = f"11:00\n行车 {data['event_marker']['resource_id']} 离线"
-        _add_cell(root, "offline_label", label, _box_style(COLORS["danger_tint"], COLORS["danger"], 11, True), x=min(event_x + 12, left + chart_width - 172), y=top - 92, width=160, height=48, tooltip=data["event_marker"].get("description"))
-        if rows:
-            affected_start = min(float(row["display_start_minute"]) for row in rows)
-            affected_end = max(float(row["display_end_minute"]) for row in rows)
-            x1 = _chart_x(affected_start, start, end, left, chart_width)
-            x2 = _chart_x(affected_end, start, end, left, chart_width)
-            _add_cell(root, "affected_window_band", "", f"rounded=0;whiteSpace=wrap;html=1;fillColor={COLORS['blue_tint']};fillOpacity=24;strokeColor={COLORS['blue']};strokeWidth=2;dashed=1;", x=x1, y=top - 8, width=max(12, x2 - x1), height=bottom - top + 16, tooltip=f"演示时间 {_demo_time_label(affected_start)} → {_demo_time_label(affected_end)}")
-            _add_cell(root, "affected_window", f"31 炉受影响区 · {_demo_time_label(affected_start)}–{_demo_time_label(affected_end)}", f"rounded=1;whiteSpace=wrap;html=1;fillColor={COLORS['blue_tint']};strokeColor={COLORS['blue']};strokeWidth=2;fontColor={COLORS['blue']};fontSize=11;fontStyle=1;align=center;verticalAlign=middle;", x=x1, y=top - 60, width=max(160, x2 - x1), height=32)
+    event_minute = float(data["time_axis"]["display_event_minute"])
+    event_x = _chart_x(event_minute, start, end, left, chart_width)
+    _add_cell(root, "offline_line", "", f"line;strokeColor={COLORS['danger']};strokeWidth=3;dashed=1;", x=event_x, y=top - 20, width=2, height=bottom - top + 20)
+    label = f"11:00\n行车 {data['event_marker']['resource_id']} 离线"
+    _add_cell(root, "offline_label", label, _box_style(COLORS["danger_tint"], COLORS["danger"], 11, True), x=min(event_x + 12, left + chart_width - 172), y=top - 92, width=160, height=48, tooltip=data["event_marker"].get("description"))
+    if rows:
+        affected_start = min(float(row["display_start_minute"]) for row in rows)
+        affected_end = max(float(row["display_end_minute"]) for row in rows)
+        x1 = _chart_x(affected_start, start, end, left, chart_width)
+        x2 = _chart_x(affected_end, start, end, left, chart_width)
+        _add_cell(root, "affected_window_band", "", f"rounded=0;whiteSpace=wrap;html=1;fillColor={COLORS['blue_tint']};fillOpacity=18;strokeColor={COLORS['blue']};strokeWidth=1;dashed=1;", x=x1, y=top - 8, width=max(12, x2 - x1), height=bottom - top + 16, tooltip=f"演示时间 {_demo_time_label(affected_start)} → {_demo_time_label(affected_end)}")
+        _add_cell(root, "affected_window", f"31 炉受影响窗口 · {_demo_time_label(affected_start)}–{_demo_time_label(affected_end)}", f"rounded=1;whiteSpace=wrap;html=1;fillColor={COLORS['blue_tint']};strokeColor={COLORS['blue']};strokeWidth=1;fontColor={COLORS['blue']};fontSize=11;fontStyle=1;align=center;verticalAlign=middle;", x=x1, y=top - 60, width=max(160, x2 - x1), height=32)
     _add_schedule_axis(root, data, start=start, end=end, left=left, width=chart_width, top=top, bottom=bottom)
     for index, row in enumerate(rows):
         y = top + index * row_height
@@ -627,52 +665,68 @@ def _schedule_page(data: dict[str, Any], *, post_event: bool) -> ET.Element:
         x1 = _chart_x(row_start, start, end, left, chart_width)
         x2 = _chart_x(row_end, start, end, left, chart_width)
         bar_width = max(5, x2 - x1)
-        is_codex = post_event and row["status"] == "Codex改配"
-        if is_codex:
-            _add_cell(root, f"codex_row_{row['heat_id']}", "", f"rounded=1;whiteSpace=wrap;html=1;fillColor={COLORS['danger_tint']};strokeColor={COLORS['danger']};strokeWidth=2;", x=24, y=y + 2, width=width - 48, height=36)
-        stroke = COLORS["danger"] if is_codex else row["color"]
-        fill = row["color"]
+        detail = heat_details[row["heat_id"]]
+        branch_row = detail[branch]
+        tree_failed = not detail["decision_tree"]["assigned"]
+        focus = tree_failed and (not is_codex_page or detail["codex"]["assigned"])
+        if focus:
+            focus_fill = COLORS["accent_tint"] if is_codex_page else COLORS["danger_tint"]
+            focus_stroke = COLORS["accent"] if is_codex_page else COLORS["danger"]
+            _add_cell(root, f"focus_row_{row['heat_id']}", "", f"rounded=1;whiteSpace=wrap;html=1;fillColor={focus_fill};strokeColor={focus_stroke};strokeWidth=3;", x=24, y=y + 2, width=width - 48, height=50)
+        comparison_stroke, comparison_fill = _comparison_colors(detail["comparison_kind"])
+        stroke = COLORS["accent"] if focus and is_codex_page else COLORS["danger"] if focus else comparison_stroke
+        fill = COLORS["accent_tint"] if focus and is_codex_page else COLORS["danger_tint"] if focus else comparison_fill
         label = row["heat_id"]
         compact_time = f"{row['display_start_label']}–{row['display_end_label']}"
-        assignment_label = row["final_assignment"] if post_event else row["baseline_assignment"]
-        if post_event and row["affected"]:
-            if is_codex:
-                assignment_label = f"AP {row['baseline_assignment']} → AR {row['final_assignment']}"
-            else:
-                assignment_label = f"{assignment_label} · {row['branch']}"
-        left_text = f"{label}\n{compact_time} · {assignment_label}"
-        badge_text = "CODEX 改配" if is_codex else "保持原计划" if post_event else "受影响范围"
-        badge_fill = COLORS["danger"] if is_codex else COLORS["blue_tint"]
-        badge_text_color = "#ffffff" if is_codex else COLORS["blue"]
-        badge_stroke = COLORS["danger"] if is_codex else COLORS["blue"]
-        _add_cell(root, f"schedule_badge_{row['heat_id']}", badge_text, f"rounded=1;whiteSpace=wrap;html=1;fillColor={badge_fill};strokeColor={badge_stroke};strokeWidth={2 if is_codex else 1};fontColor={badge_text_color};fontSize=9;fontStyle=1;align=center;verticalAlign=middle;", x=40, y=y + 7, width=96, height=24)
-        _add_cell(root, f"schedule_label_{row['heat_id']}", left_text, _text_style(9, COLORS["ink"], is_codex), x=148, y=y, width=372, height=36)
-        bar_style = _bar_style(fill, stroke, 9, COLORS["ink"]) + ("strokeWidth=4;" if is_codex else "strokeWidth=1;")
-        _add_cell(root, f"schedule_bar_{row['heat_id']}", "", bar_style, x=x1, y=y + 7, width=bar_width, height=24, tooltip=(
+        assignment_label = branch_row["display"]
+        if focus and is_codex_page:
+            assignment_label = f"{assignment_label} · 路线 {branch_row.get('refining_route') or 'A1'}"
+        elif focus:
+            assignment_label = "未分配 · 缺少精炼路线"
+        other_branch = detail["codex" if branch == "decision_tree" else "decision_tree"]
+        comparison_text = (
+            f"AQ {detail['decision_tree']['display']} / 路线 {detail['decision_tree'].get('refining_route') or '-'}"
+            f"  |  AR {detail['codex']['display']} / 路线 {detail['codex'].get('refining_route') or '-'}"
+        )
+        left_text = f"{label}\n{compact_time} · {assignment_label}\n{comparison_text}"
+        badge_text = "CODEX 补全" if focus and is_codex_page else "决策树失效" if focus else "已分配"
+        badge_fill = COLORS["accent"] if focus and is_codex_page else COLORS["danger"] if focus else comparison_fill
+        badge_text_color = "#ffffff" if focus else comparison_stroke
+        badge_stroke = COLORS["accent"] if focus and is_codex_page else COLORS["danger"] if focus else comparison_stroke
+        _add_cell(root, f"schedule_badge_{row['heat_id']}", badge_text, f"rounded=1;whiteSpace=wrap;html=1;fillColor={badge_fill};strokeColor={badge_stroke};strokeWidth={3 if focus else 1};fontColor={badge_text_color};fontSize=9;fontStyle=1;align=center;verticalAlign=middle;", x=40, y=y + 7, width=96, height=24)
+        _add_cell(root, f"schedule_label_{row['heat_id']}", left_text, _text_style(8, COLORS["ink"], focus), x=148, y=y, width=372, height=50)
+        bar_style = _bar_style(fill, stroke, 9, COLORS["ink"]) + ("strokeWidth=4;" if focus else "strokeWidth=1;") + ("dashed=1;" if focus and not is_codex_page else "")
+        _add_cell(root, f"schedule_bar_{row['heat_id']}", "", bar_style, x=x1, y=y + 15, width=bar_width, height=24, tooltip=(
             f"炉次={row['heat_id']}\n演示开始={row['display_start_label']}\n演示结束={row['display_end_label']}\n"
-            f"钢包={row['ladle_id'] or '未分配'}\n行车={row['crane_id'] or '未分配'}\n状态={row['status']}"
+            f"钢包={branch_row.get('ladle_id') or '未分配'}\n行车={branch_row.get('crane_id') or '未分配'}\n状态={badge_text}"
         ))
-        if is_codex:
-            change_text = f"Codex：AP {row['baseline_assignment']} → AR {row['final_assignment']}"
+        if focus:
+            change_text = (
+                f"Codex 已补全：{branch_row['display']} / 路线 {branch_row.get('refining_route') or 'A1'}"
+                if is_codex_page else
+                "决策树未完成：钢包、行车均未分配"
+            )
             change_x = x2 + 8
             change_width = 276
             if change_x + change_width > left + chart_width:
                 change_x = max(left + 8, x1 - change_width - 8)
             _add_cell(
                 root,
-                f"codex_change_{row['heat_id']}",
+                f"focus_change_{row['heat_id']}",
                 change_text,
-                _box_style(COLORS["danger_tint"], COLORS["danger"], 9, True, "left"),
+                _box_style(COLORS["accent_tint"] if is_codex_page else COLORS["danger_tint"], COLORS["accent"] if is_codex_page else COLORS["danger"], 9, True, "left"),
                 x=change_x,
-                y=y + 4,
+                y=y + 12,
                 width=change_width,
                 height=30,
-                tooltip=f"AP 原计划={row['baseline_assignment']}; AR Codex={row['final_assignment']}",
+                tooltip=f"heat={row['heat_id']}; branch={branch}; assignment={branch_row['display']}",
             )
     note_y = bottom + 18
-    note = "每行是一个受影响炉次；左侧为炉次号和计划起止时间，彩色条表示该炉次的完整计划窗口。"
-    if post_event:
-        note += " 蓝色状态标签表示保持计划；红色整行、红色粗框和 AP→AR 说明框共同标出模型改配炉次。时间条保持不变，表示炉次生产窗口未被改动。"
+    note = (
+        "图 2 与图 1 使用相同炉次顺序和时间轴。每行第三行同时列出 AQ 与 AR 的钢包/行车结果；橙色高亮仍表示 Codex 补全失效炉次。"
+        if is_codex_page else
+        "每行第三行同时列出 AQ 与 AR 的钢包/行车结果。红色高亮是唯一未完成炉次，请在图 2 的同一行查看 Codex 补全。"
+    )
     _add_cell(root, "chart_note", note, _box_style(COLORS["paper"], COLORS["rule"], 11, False, "left"), x=40, y=note_y, width=left + chart_width - 40, height=42)
     _add_cell(root, "chart_boundary", "条内 STxx / 行车号是钢包与转运资源分配；这不是 PLC 实测天车连续运动轨迹。", _text_style(10, COLORS["muted"]), x=40, y=note_y + 52, width=left + chart_width - 40, height=22)
     return diagram
@@ -680,9 +734,130 @@ def _schedule_page(data: dict[str, Any], *, post_event: bool) -> ET.Element:
 
 def build_drawio(data: dict[str, Any]) -> ET.ElementTree:
     root = ET.Element("mxfile", {"host": "app.diagrams.net", "agent": "steel-ladle-gantt", "version": "24.0.0", "type": "device"})
-    root.append(_schedule_page(data, post_event=False))
-    root.append(_schedule_page(data, post_event=True))
+    root.append(_schedule_page(data, branch="decision_tree"))
+    root.append(_schedule_page(data, branch="codex"))
     return ET.ElementTree(root)
+
+
+def _comparison_svg(data: dict[str, Any], branch: str) -> str:
+    rows = _affected_schedule_rows(data)
+    details = {row["heat_id"]: row for row in data["heat_rows"]}
+    start = float(data["time_axis"]["display_start_minute"])
+    end = float(data["time_axis"]["display_end_minute"])
+    width, left, chart_width = 1840, 540, 1240
+    top, row_height = 250, 54
+    bottom = top + len(rows) * row_height
+    height = bottom + 116
+    is_codex = branch == "codex"
+    prefix = "ar" if is_codex else "aq"
+    title = "图 2  Codex 重排：补全决策树失效炉次" if is_codex else "图 1  决策树重排：1 个炉次未完成分配"
+    assigned = data["branch_summary"][branch]["assigned"]
+    subtitle = f"同一事故 · 同一 31 炉窗口 · 同一时间轴 · {'AR Codex' if is_codex else 'AQ 决策树'} 完成 {assigned}/31"
+    description = (
+        "Codex 甘特图在 JU6310E7-300751 行高亮补全的钢包 ST36、行车 1520 和精炼路线 A1。"
+        if is_codex else
+        "决策树甘特图在 JU6310E7-300751 行标出未完成钢包和行车分配的缺口。"
+    )
+    out = [
+        f'<svg class="gantt" viewBox="0 0 {width} {height}" role="img" aria-labelledby="{prefix}-title {prefix}-desc">',
+        f'<title id="{prefix}-title">{html.escape(title)}</title>',
+        f'<desc id="{prefix}-desc">{html.escape(description)}</desc>',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        f'<text x="40" y="48" class="title">{html.escape(title)}</text>',
+        f'<text x="40" y="78" class="subtitle">{html.escape(subtitle)}</text>',
+    ]
+    context = (
+        "对照图 1 的同一行：Codex 补全 ST36 / 行车 1520 / 精炼路线 A1，并通过检查。"
+        if is_codex else
+        "唯一失效炉次：JU6310E7-300751。决策树未分配钢包和行车，原因是缺少精炼路线。"
+    )
+    out.extend([
+        '<rect x="40" y="100" width="1740" height="40" rx="6" fill="#f7f9fc" stroke="#d9dce3"/>',
+        f'<text x="56" y="126" class="context">{html.escape(context)}</text>',
+    ])
+    event_x = _chart_x(float(data["time_axis"]["display_event_minute"]), start, end, left, chart_width)
+    affected_start = min(float(row["display_start_minute"]) for row in rows)
+    affected_end = max(float(row["display_end_minute"]) for row in rows)
+    ax1 = _chart_x(affected_start, start, end, left, chart_width)
+    ax2 = _chart_x(affected_end, start, end, left, chart_width)
+    out.append(f'<rect x="{ax1:.1f}" y="{top-8}" width="{ax2-ax1:.1f}" height="{bottom-top+16}" fill="#eaf1ff" fill-opacity="0.28" stroke="#2e5aa8" stroke-dasharray="5 4"/>')
+    for tick in range(int(start), int(end) + 1, 60):
+        x = _chart_x(tick, start, end, left, chart_width)
+        out.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" stroke="#d9dce3" stroke-dasharray="3 4"/>')
+        out.append(f'<text x="{x:.1f}" y="{top-20}" class="tick" text-anchor="middle">{_demo_time_label(tick)}</text>')
+    out.extend([
+        f'<line x1="{event_x:.1f}" y1="{top-18}" x2="{event_x:.1f}" y2="{bottom}" stroke="#b94747" stroke-width="2" stroke-dasharray="6 5"/>',
+        f'<rect x="{event_x+12:.1f}" y="158" width="160" height="48" rx="6" fill="#fff0f0" stroke="#b94747"/>',
+        f'<text x="{event_x+92:.1f}" y="178" class="event" text-anchor="middle"><tspan x="{event_x+92:.1f}" dy="0">11:00</tspan><tspan x="{event_x+92:.1f}" dy="16">行车 2500 离线</tspan></text>',
+    ])
+    for index, row in enumerate(rows):
+        y = top + index * row_height
+        detail = details[row["heat_id"]]
+        branch_row = detail[branch]
+        focus = not detail["decision_tree"]["assigned"]
+        row_start = float(row["display_start_minute"])
+        row_end = float(row["display_end_minute"])
+        x1 = _chart_x(row_start, start, end, left, chart_width)
+        x2 = _chart_x(row_end, start, end, left, chart_width)
+        if focus:
+            color = COLORS["accent"] if is_codex else COLORS["danger"]
+            tint = COLORS["accent_tint"] if is_codex else COLORS["danger_tint"]
+            out.append(f'<rect x="24" y="{y+2}" width="1792" height="50" rx="5" fill="{tint}" stroke="{color}" stroke-width="3"/>')
+        else:
+            color, tint = _comparison_colors(detail["comparison_kind"])
+        badge = "CODEX 补全" if focus and is_codex else "决策树失效" if focus else "已分配"
+        badge_fill = color if focus else tint
+        badge_text = "#ffffff" if focus else color
+        assignment = branch_row["display"]
+        if focus and is_codex:
+            assignment += f" · 路线 {branch_row.get('refining_route') or 'A1'}"
+        elif focus:
+            assignment = "未分配 · 缺少精炼路线"
+        out.extend([
+            f'<rect x="40" y="{y+8}" width="96" height="24" rx="4" fill="{badge_fill}" stroke="{color}"/>',
+            f'<text x="88" y="{y+24}" class="badge" fill="{badge_text}" text-anchor="middle">{html.escape(badge)}</text>',
+            f'<text x="148" y="{y+15}" class="heat{ " focus" if focus else ""}">{html.escape(row["heat_id"])}</text>',
+            f'<text x="148" y="{y+31}" class="assignment">{html.escape(row["display_start_label"] + "–" + row["display_end_label"] + " · " + assignment)}</text>',
+            f'<text x="148" y="{y+47}" class="comparison">AQ {html.escape(detail["decision_tree"]["display"] + " / 路线 " + (detail["decision_tree"].get("refining_route") or "-"))}  |  AR {html.escape(detail["codex"]["display"] + " / 路线 " + (detail["codex"].get("refining_route") or "-"))}</text>',
+            f'<rect x="{x1:.1f}" y="{y+15}" width="{max(5.0, x2-x1):.1f}" height="24" rx="4" fill="{tint}" stroke="{color}" stroke-width="{4 if focus else 1}"{(" stroke-dasharray=\"5 4\"" if focus and not is_codex else "")}/>',
+        ])
+        if focus:
+            callout = "Codex 已补全：ST36 / 1520 / 路线 A1" if is_codex else "决策树未完成：钢包、行车均未分配"
+            callout_x = min(x2 + 12, left + chart_width - 300)
+            out.extend([
+                f'<rect x="{callout_x:.1f}" y="{y+12}" width="292" height="30" rx="5" fill="{tint}" stroke="{color}" stroke-width="2"/>',
+                f'<text x="{callout_x+12:.1f}" y="{y+32}" class="callout" fill="{color}">{html.escape(callout)}</text>',
+            ])
+    note = (
+        "每行第三行同时列出 AQ 与 AR 的钢包/行车结果；橙色高亮表示 Codex 补全了决策树留下的缺口。"
+        if is_codex else
+        "每行第三行同时列出 AQ 与 AR 的钢包/行车结果；红色高亮是唯一未完成炉次。"
+    )
+    out.extend([
+        f'<line x1="40" y1="{bottom+20}" x2="1780" y2="{bottom+20}" stroke="#d9dce3"/>',
+        f'<text x="40" y="{bottom+48}" class="note">{html.escape(note)}</text>',
+        f'<text x="40" y="{bottom+76}" class="boundary">钢包和行车字段表示调度分配，不是 PLC 实测连续运动轨迹。</text>',
+        '</svg>',
+    ])
+    return "".join(out)
+
+
+def build_comparison_html(data: dict[str, Any]) -> str:
+    aq = _comparison_svg(data, "decision_tree")
+    ar = _comparison_svg(data, "codex")
+    comparison = data["comparison_summary"]
+    counts = comparison["counts"]
+    summary_line = (
+        f"31 炉逐炉对照：AQ 与 AR 完全相同 {comparison['same_count']} 炉；"
+        f"AQ 与 AR 资源选择不同 {comparison['different_count']} 炉；"
+        f"AQ 失效、AR 补全 {counts.get('AQ失效，AR补全', 0)} 炉。"
+    )
+    return f'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>决策树与 Codex 重排对照甘特图</title>
+<style>
+*{{box-sizing:border-box}} body{{margin:0;background:#eef1f5;color:#2d3142;font-family:"PingFang SC","Microsoft YaHei",sans-serif}} main{{max-width:1880px;margin:0 auto;padding:24px}} .summary{{background:#fff;border:1px solid #d9dce3;padding:18px 22px;margin:0 0 24px}} .summary h1{{font-size:20px;margin:0 0 8px}} .summary p{{font-size:13px;margin:6px 0;color:#4f5d75;line-height:1.6}} .summary strong{{color:#2d3142}} .legend{{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#4f5d75}} .legend i{{display:inline-block;width:12px;height:12px;border:1px solid currentColor;margin-right:5px;vertical-align:-2px}} section{{background:#fff;border:1px solid #d9dce3;margin:0 0 24px;overflow:auto}} svg{{display:block;width:100%;height:auto;min-width:1180px}} .title{{font-size:24px;font-weight:700;fill:#2d3142}} .subtitle,.context{{font-size:12px;fill:#4f5d75}} .tick{{font-size:10px;fill:#7a8399}} .event{{font-size:11px;font-weight:700;fill:#b94747}} .badge{{font-size:9px;font-weight:700}} .heat{{font-size:10px;font-weight:600;fill:#4f5d75}} .heat.focus{{font-size:11px;fill:#2d3142}} .assignment{{font-size:9px;fill:#7a8399}} .comparison{{font-size:8px;fill:#4f5d75}} .callout{{font-size:10px;font-weight:700}} .note{{font-size:12px;font-weight:600;fill:#2d3142}} .boundary{{font-size:10px;fill:#7a8399}} @media print{{body{{background:#fff}}main{{padding:0}}.summary{{border:0}}section{{border:0;page-break-after:always;margin:0}}}}
+</style></head><body><main><div class="summary"><h1>AQ 决策树 vs AR Codex：31 炉逐炉对照</h1><p><strong>{html.escape(summary_line)}</strong></p><p>阅读方法：每行第二行是当前图对应线路的结果；第三行固定给出 <strong>AQ 钢包/行车 | AR 钢包/行车</strong>。时间条相同只表示计划窗口没有改变，不表示两套配包结果相同。</p><div class="legend"><span style="color:#3c7a57"><i style="background:#eaf5ee"></i>绿色：AQ 与 AR 相同</span><span style="color:#c99700"><i style="background:#fff8d8"></i>黄色：AQ 与 AR 不同</span><span style="color:#b94747"><i style="background:#fff0f0"></i>红色：决策树失效</span><span style="color:#eb6c36"><i style="background:#fff0e8"></i>橙色：Codex 补全</span></div><p>重点仍是行车 2500 在 11:00 离线后，AQ 有 1 炉未完成，而 AR 对该炉次补全；其余差异通过黄色逐炉标识。</p></div><section id="decision-tree">{aq}</section><section id="codex">{ar}</section></main></body></html>'''
 
 
 def validate_semantics(data: dict[str, Any]) -> None:
@@ -708,30 +883,36 @@ def validate_semantics(data: dict[str, Any]) -> None:
         fail("unstable heat element key")
 
 
-def write_outputs(data: dict[str, Any], output_dir: Path) -> tuple[Path, Path, Path]:
+def write_outputs(data: dict[str, Any], output_dir: Path) -> tuple[Path, Path, Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / "diagram_data.json"
     drawio_path = output_dir / "disturbance_gantt.drawio"
+    html_path = output_dir / "branch_comparison_gantt.html"
     readme_path = output_dir / "README.md"
     json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tree = build_drawio(data)
     ET.indent(tree, space="  ")
     tree.write(drawio_path, encoding="utf-8", xml_declaration=True)
+    html_path.write_text(build_comparison_html(data), encoding="utf-8")
     readme_path.write_text(
         "# 扰动响应甘特图\n\n"
         f"- 场景：`{data['scenario_id']}`\n"
         f"- 数据来源：`{data['source_audit']}`\n"
         f"- 全量计划来源：`{data['plan_source_audit']}`\n"
-        "- 页面：`01-离线前受影响炉次`、`02-离线后受影响炉次`\n"
+        "- 页面：`01-决策树重排-1炉失效`、`02-Codex重排-补全失效炉次`\n"
         f"- 只展开受影响炉次：`{data['impact_window']['heat_count']}`；其余 `{len(data['full_schedule']) - data['impact_window']['heat_count']}` 炉压缩为上下文说明。\n"
         "- 语义：AP/AQ/AR 分别表示原计划、决策树重排和 Codex 重排；炉次到钢包是预配包，转运任务到天车是资源调度。\n"
         "- 横轴：统一使用 10:00–20:00 演示生产时间；事故固定为 11:00，炉次持续时长与相对先后取自源数据。\n"
         "- 时间审计：源 occurred_at 和源炉次时间保留在 diagram_data.json 与图形 tooltip，不与可见演示时间混用。\n"
-        "- 视觉区分：蓝色标签表示受扰动但保持计划；红色整行、粗框与 CODEX 改配标签表示模型改配。\n"
+        "- 视觉区分：图 1 用红色标出决策树未分配的 JU6310E7-300751；图 2 在同一行用橙色标出 Codex 补全结果。其余 30 炉统一降低视觉权重。\n"
+        f"- 逐炉对照：AQ 与 AR 完全相同 {data['comparison_summary']['same_count']} 炉；不同 {data['comparison_summary']['different_count']} 炉。每行第三行固定显示 AQ/AR 的钢包、行车和路线；颜色表达是否一致。\n"
+        "- 差异统计：" + "；".join(f"{key} {value} 炉" for key, value in data["comparison_summary"]["counts"].items()) + "。\n"
+        "- 颜色口径：绿色表示 AQ=AR，黄色表示 AQ≠AR，红色表示决策树失效，橙色表示 Codex 补全；路线作为附加字段展示。\n"
+        "- 重要说明：两图时间条完全相同，只表示计划窗口未改变，不表示 AQ 与 AR 的资源分配相同。\n"
         "- 边界：当前源数据没有取包点、落包点、任务持续时间或 PLC 连续坐标，因此图中天车不是实测运动轨迹。\n",
         encoding="utf-8",
     )
-    return drawio_path, json_path, readme_path
+    return drawio_path, json_path, readme_path, html_path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -746,7 +927,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps({"drawio": str(paths[0]), "diagram_data": str(paths[1]), "readme": str(paths[2]), "affected_heats": len(data["heat_rows"])}, ensure_ascii=False))
+    print(json.dumps({"drawio": str(paths[0]), "diagram_data": str(paths[1]), "readme": str(paths[2]), "html": str(paths[3]), "affected_heats": len(data["heat_rows"])}, ensure_ascii=False))
     return 0
 
 

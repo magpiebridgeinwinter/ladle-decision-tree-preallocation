@@ -21,6 +21,7 @@ from ladle_preallocation.decision_tree.config import TREE_VERSION
 from ladle_preallocation.disturbance import inject_disturbance, DisturbanceSpec
 from ladle_preallocation.response import TieredResponseController, ResponsePath
 from ladle_preallocation.llm import ReActRescheduler
+from ladle_preallocation.llm import load_runtime_config
 from ladle_preallocation.experiment import BatchRunner, BatchConfig
 from ladle_preallocation.rag import KnowledgeBase
 from ladle_preallocation.real_data.pipeline import run_pipeline
@@ -47,13 +48,17 @@ Examples:
     parser.add_argument("--output-dir", default="outputs")
     parser.add_argument("--dt-heat-limit", type=int, default=20)
     parser.add_argument("--num-scenarios", type=int, default=10)
-    parser.add_argument("--llm-api-key", default="")
-    parser.add_argument("--llm-api-base", default="https://api.deepseek.com")
-    parser.add_argument("--llm-model", default="deepseek-v4-flash")
+    parser.add_argument("--llm-api-key", default=None)
+    parser.add_argument("--llm-api-base", default=None)
+    parser.add_argument("--llm-model", default=None)
     parser.add_argument("--llm-max-rounds", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--skip-llm", action="store_true")
     args = parser.parse_args()
+    env_config = load_runtime_config()
+    llm_api_key = args.llm_api_key if args.llm_api_key is not None else env_config.api_key
+    llm_api_base = args.llm_api_base or env_config.api_base
+    llm_model = args.llm_model or env_config.model
 
     print("=" * 60)
     print("LLM 局部重调度方案 Demo")
@@ -128,13 +133,14 @@ Examples:
 
         # Setup LLM rescheduler if API key provided
         llm = None
-        if args.llm_api_key and not args.skip_llm:
+        if llm_api_key and not args.skip_llm:
             llm = ReActRescheduler(
-                api_base=args.llm_api_base,
-                api_key=args.llm_api_key,
-                model=args.llm_model,
+                api_base=llm_api_base,
+                api_key=llm_api_key,
+                model=llm_model,
                 max_rounds=args.llm_max_rounds,
                 verbose=True,
+                configuration_source=("explicit_cli" if args.llm_api_key is not None else env_config.source),
             )
             llm_fn = lambda h, l, c: (
                 lambda r: (r.success, r.assignments)

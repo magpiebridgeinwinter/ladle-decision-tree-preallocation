@@ -47,7 +47,9 @@ class OfflineScenarioTests(unittest.TestCase):
     def test_facility_scenarios_persist_validated_alternate_routes(self):
         row = next(item for item in self.records if item["disturbance_kind"] == "facility_unavailable")
         routes = {item["heat_id"]: item["refining_route"] for item in row["responses"]["llm"]["assignments"]}
-        self.assertEqual(routes, {"AQ0640E1-300703": "A1", "DU3851D1-300667": "R0"})
+        self.assertEqual(set(routes), {item["heat_id"] for item in row["inputs"]["heats"]})
+        allowed = row["audit"]["controlled_overrides"]["route_policy"]["allowed_routes_by_heat"]
+        self.assertTrue(all(route in allowed[heat_id] for heat_id, route in routes.items()))
         self.assertTrue(all(item["action"] == "assign" for item in row["responses"]["llm"]["assignments"]))
 
     def test_event_state_changes_are_stored_for_concrete_failures(self):
@@ -77,8 +79,15 @@ class OfflineScenarioTests(unittest.TestCase):
 
     def test_routes_are_source_backed_assets(self):
         for row in self.records:
+            if row["category"] != "llm_fallback_stress":
+                continue
             routes = {item["asset_id"] for item in row["assets"] if item["asset_type"] == "route"}
-            self.assertTrue({"A1", "A2", "R0", "R1"}.issubset(routes))
+            assignment_routes = {
+                str(item.get("refining_route") or "").strip()
+                for item in row["responses"]["llm"]["assignments"]
+                if item.get("action") == "assign" and str(item.get("refining_route") or "").strip()
+            }
+            self.assertTrue(assignment_routes.issubset(routes))
 
     def test_primary_crane_replay_uses_real_31_heat_window(self):
         row = next(item for item in self.records if item["category"] == "llm_fallback_stress" and item["disturbance_kind"] == "crane_offline")
@@ -87,6 +96,17 @@ class OfflineScenarioTests(unittest.TestCase):
         self.assertEqual(row["responses"]["decision_tree"]["num_assigned"], 30)
         self.assertEqual(row["responses"]["llm"]["num_assigned"], 31)
         self.assertEqual(len(row["audit"]["controlled_overrides"]["offline_crane_ids"]), 1)
+
+    def test_catalog_windows_are_dynamic_and_branches_share_scope(self):
+        stress = [row for row in self.records if row["category"] == "llm_fallback_stress"]
+        counts = {len(row["inputs"]["heats"]) for row in stress}
+        self.assertGreater(len(counts), 1)
+        self.assertNotIn(2, counts)
+        for row in stress:
+            affected = {item["heat_id"] for item in row["inputs"]["heats"]}
+            self.assertEqual(affected, set(row["audit"]["impact_scope"]["affected_heat_ids"]))
+            self.assertEqual(affected, {item["heat_id"] for item in row["responses"]["decision_tree"]["assignments"]})
+            self.assertEqual(affected, {item["heat_id"] for item in row["responses"]["llm"]["assignments"]})
 
     def test_database_rejects_incomplete_llm_evidence(self):
         records = deepcopy(self.records)

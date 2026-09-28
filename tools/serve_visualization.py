@@ -1,9 +1,9 @@
 """Serve the interactive demo and expose its optional realtime LLM boundary.
 
 The static page and generated catalog are intentionally kept separate from the
-LLM credentials.  The endpoint reuses the real-data-derived controlled stress
-scenario so a request exercises the same decision-tree-first controller used by
-the saved audit.  It does not persist request bodies, prompts, or credentials.
+LLM credentials. The endpoint reuses the real-data-derived controlled stress
+scenario and runs the same direct LLM workflow as production. It does not
+persist request bodies, prompts, or credentials.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sqlite3
 import sys
 from http import HTTPStatus
@@ -29,8 +28,10 @@ for import_root in (ROOT, TOOLS_ROOT):
         sys.path.insert(0, str(import_root))
 
 from ladle_preallocation.llm.react_agent import ReActRescheduler
+from ladle_preallocation.llm.config import load_runtime_config
 from ladle_preallocation.offline_scenarios import ScenarioRepository
 from ladle_preallocation.offline_scenarios.validation import ScenarioValidationPolicy, ScenarioValidator
+from ladle_preallocation.preallocation_api import allocate_preallocation
 from ladle_preallocation.real_data.audit import load_location_aware_audit
 from ladle_preallocation.response import TieredResponseController
 
@@ -44,11 +45,8 @@ LOGGER = logging.getLogger("visualization-server")
 
 def _runtime_config() -> dict[str, str]:
     """Read runtime-only LLM settings without exposing secret values."""
-    return {
-        "api_key": os.environ.get("LLM_API_KEY", "").strip(),
-        "api_base": os.environ.get("LLM_API_BASE", "https://api.deepseek.com").strip(),
-        "model": os.environ.get("LLM_MODEL", "deepseek-v4-flash").strip(),
-    }
+    config = load_runtime_config()
+    return {"api_key": config.api_key, "api_base": config.api_base, "model": config.model, "source": config.source}
 
 
 def _result_payload(result: Any, scenario: Any, *, api_configured: bool) -> dict[str, Any]:
@@ -86,15 +84,18 @@ def simulate(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
             api_key=config["api_key"],
             model=config["model"],
             max_rounds=5,
+            configuration_source=config["source"],
         )
-        # The controller always executes the decision tree first.  The LLM
-        # object is only invoked after that path fails and budget remains.
+        # The controller enters the direct disturbance workflow; the LLM
+        # object is still guarded by the budget and deterministic validator.
         first_heat = scenario.heats_needing_reallocation[0]
         validator = ScenarioValidator(ScenarioValidationPolicy(
             allowed_routes_by_heat={str(first_heat["heat_id"]): (str(first_heat.get("refining_route") or "").strip(),)},
         ))
         result, llm_result = TieredResponseController(llm, validator=validator).handle_disturbance(scenario)
         response = _result_payload(result, scenario, api_configured=bool(config["api_key"]))
+        response["workflow"] = result.workflow.as_dict() if result.workflow else None
+        response["configuration_source"] = config["source"]
         response["llm_attempted"] = llm_result is not None
         response["llm_path"] = llm_result.path.value if llm_result is not None else None
         response["scenario_id"] = scenario_id
@@ -165,7 +166,8 @@ class DemoHandler(SimpleHTTPRequestHandler):
             self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "离线场景查询失败", "error_type": type(exc).__name__})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
-        if urlparse(self.path).path != "/api/simulate":
+        path = urlparse(self.path).path
+        if path not in {"/api/simulate", "/api/v1/ladle-preallocation/allocate"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
             return
         try:
@@ -178,7 +180,10 @@ class DemoHandler(SimpleHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"请求格式错误：{type(exc).__name__}"})
             return
-        status, body = simulate(payload)
+        if path == "/api/v1/ladle-preallocation/allocate":
+            status, body = allocate_preallocation(payload)
+        else:
+            status, body = simulate(payload)
         self._send_json(status, body)
 
 

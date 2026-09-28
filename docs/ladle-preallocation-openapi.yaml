@@ -1,0 +1,658 @@
+openapi: 3.0.3
+info:
+  title: 钢包配包服务 API
+  version: 2.0.0
+  description: |
+    本文件是当前本地 HTTP 服务的完整 API 契约，覆盖场景目录查询、扰动模拟和正常预配包。
+
+    输入模型统一使用 `Input...` 命名，表示调用方提交的字段；输出模型统一使用
+    `Output...` 命名，表示服务返回的字段。正常预配包只执行决策树，突发情况才进入
+    独立的 LLM Workflow，LLM 结果仍必须通过确定性硬约束校验。
+
+    当前服务不提供鉴权。LLM 密钥只从进程环境变量读取，不属于任何请求或响应字段。
+  contact:
+    name: 钢包智能排程系统
+servers:
+  - url: http://127.0.0.1:4173
+    description: 本地开发服务
+tags:
+  - name: Scenario Catalog
+    description: 离线受控扰动场景目录
+  - name: Disturbance Simulation
+    description: 实时扰动响应入口
+  - name: Ladle Preallocation
+    description: 上游炉次计划的正常预配包
+paths:
+  /api/scenarios/summary:
+    get:
+      tags: [Scenario Catalog]
+      summary: 获取场景目录摘要
+      operationId: getScenarioSummary
+      description: |
+        返回离线场景库的版本、总数、分类数量、扰动分组数量和已验证的 LLM 回退数量。
+        本接口无请求体和查询参数。
+      responses:
+        '200':
+          description: 场景目录摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputScenarioSummary'
+              example:
+                schema_version: 2
+                scenario_count: 21
+                categories:
+                  - category: decision_tree_control
+                    count: 1
+                  - category: llm_fallback_stress
+                    count: 20
+                disturbance_groups:
+                  - disturbance_group: 设备
+                    count: 3
+                verified_llm_fallback_count: 20
+        '503':
+          $ref: '#/components/responses/ScenarioDatabaseUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/scenarios:
+    get:
+      tags: [Scenario Catalog]
+      summary: 查询场景列表
+      operationId: listScenarios
+      description: |
+        返回场景选择器使用的摘要记录。未传 `category` 时返回全部场景；传入分类时只返回
+        对应分类。可用分类来自离线库：`decision_tree_control` 和 `llm_fallback_stress`。
+      parameters:
+        - $ref: '#/components/parameters/ScenarioCategory'
+      responses:
+        '200':
+          description: 场景摘要列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputScenarioList'
+              example:
+                scenarios:
+                  - scenario_id: llm_fallback_007_ladle_damage
+                    category: llm_fallback_stress
+                    disturbance_kind: ladle_damage
+                    disturbance_group: 钢包
+                    title: 钢包损坏
+                    description: 原钢包进入不可用状态
+                    visual_cue: ladle_damage
+                    evidence_type: real_data_controlled_injection
+                    event_time: 660
+                    window_start: 600
+                    window_end: 1200
+                    seed: 7
+                    source_plan: PLAN(1).xlsx
+                    source_crane: CRANE.xlsx
+                    source_audit: outputs/real_data_location_aware/decision_tree_audit.json
+                    decision_tree_success: false
+                    llm_attempted: true
+                    llm_success: true
+                    affected_heat_count: 2
+                    schema_version: 2
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ScenarioDatabaseUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/scenarios/{scenario_id}:
+    get:
+      tags: [Scenario Catalog]
+      summary: 获取场景详情
+      operationId: getScenario
+      description: |
+        返回一个离线场景的完整证据，包括事件、资源、决策树和 LLM 响应、验证结果及审计字段。
+        详情是只读回放数据，不会重新执行分配算法。
+      parameters:
+        - $ref: '#/components/parameters/ScenarioId'
+      responses:
+        '200':
+          description: 场景详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputScenarioDetail'
+        '404':
+          description: 场景不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputErrorResponse'
+              example:
+                error: 离线场景不存在
+                scenario_id: does-not-exist
+        '503':
+          $ref: '#/components/responses/ScenarioDatabaseUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/simulate:
+    post:
+      tags: [Disturbance Simulation]
+      summary: 执行受控扰动响应
+      operationId: simulateDisturbance
+      description: |
+        对当前唯一开放的真实快照派生场景执行实时扰动 Workflow。`scenario_id` 可省略，省略时
+        使用默认场景 `real_window_1100_1120_codex_stress_001`。决策树和硬约束控制器先后参与；
+        当没有可用 LLM 密钥或 Workflow 失败时，接口返回 Frozen/人工复核语义，不伪造成功结果。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InputSimulationRequest'
+            example:
+              scenario_id: real_window_1100_1120_codex_stress_001
+      responses:
+        '200':
+          description: 扰动响应完成，可能是决策树成功或 LLM Workflow 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputSimulationResponse'
+        '400':
+          description: 场景编号不受支持或请求格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputErrorResponse'
+              example:
+                error: 当前实时接口只开放真实快照派生的受控压力场景
+                supported_scenario_ids:
+                  - real_window_1100_1120_codex_stress_001
+        '503':
+          description: 未配置 LLM 密钥，已返回 Frozen + 人工复核结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OutputSimulationResponse'
+                  - $ref: '#/components/schemas/OutputErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/ladle-preallocation/allocate:
+    post:
+      tags: [Ladle Preallocation]
+      summary: 根据上游炉次计划生成钢包预配结果
+      operationId: allocateLadles
+      description: |
+        接收上游已经安排好的炉次计划、钢包资源、行车快照和位置映射。服务只执行正常预配包，
+        不重新编制炉次计划，也不会构造或调用 LLM。每条输入炉次都会在 `results` 中获得一条结果。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InputPreallocationRequest'
+            example:
+              request_id: plan-20260929-0001
+              plan_date: '2026-09-29'
+              execution_mode: sliding_window
+              window_minutes: 180
+              heats:
+                - heat_id: AQ0640E1
+                  plan_sequence: 640
+                  required_grade: 5
+                  refining_route: LF-RH
+                  priority: 10
+                  tap_finish_at: '2026-09-29T08:20:00+08:00'
+                  ladle_arrival_at: '2026-09-29T08:35:00+08:00'
+                  ladle_pour_start_at: '2026-09-29T08:52:00+08:00'
+              ladles:
+                - ladle_id: ST38
+                  grade: 5
+                  position_code: 4QF5
+                  position_m: 38105
+                  weight_tonnes: 160
+                  age_seconds: 420
+                  availability: available
+              cranes:
+                - crane_id: '2500'
+                  online_status: online
+                  position_m: 35000
+                  speed_mps: 2
+                  current_load_tonnes: 0
+                  max_load_tonnes: 300
+                  safe_distance_m: 10
+                  limit_0_m: 0
+                  limit_1_m: 48000
+              location_map:
+                - position_code: 4QF5
+                  span_name: 4Q
+                  position_m: 38105
+                  location_type: ladle_yard
+                  status: available
+      responses:
+        '200':
+          description: 所有炉次均完成分配
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputPreallocationResponse'
+        '400':
+          description: JSON、必填字段、时间或数值格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputErrorResponse'
+        '409':
+          description: 炉次、钢包、行车或位置映射存在重复/冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputErrorResponse'
+        '422':
+          description: 输入可解析，但至少一条炉次没有满足硬约束的可行分配
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputPreallocationResponse'
+
+components:
+  parameters:
+    ScenarioCategory:
+      name: category
+      in: query
+      required: false
+      description: 可选场景分类过滤器
+      schema:
+        type: string
+        enum: [decision_tree_control, llm_fallback_stress]
+    ScenarioId:
+      name: scenario_id
+      in: path
+      required: true
+      description: 离线场景唯一标识
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OutputErrorResponse'
+    ScenarioDatabaseUnavailable:
+      description: 离线场景数据库不存在或版本不受支持
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OutputErrorResponse'
+    InternalServerError:
+      description: 服务端处理失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OutputErrorResponse'
+
+  schemas:
+    InputSimulationRequest:
+      type: object
+      description: 扰动模拟输入。字段省略时使用当前默认受控场景。
+      additionalProperties: false
+      properties:
+        scenario_id:
+          type: string
+          description: 当前只支持的实时场景编号
+          default: real_window_1100_1120_codex_stress_001
+          example: real_window_1100_1120_codex_stress_001
+
+    InputPreallocationRequest:
+      type: object
+      description: 输入模型。上游系统提交的炉次计划和资源快照。
+      required: [request_id, heats, ladles, cranes]
+      additionalProperties: false
+      properties:
+        request_id:
+          type: string
+          minLength: 1
+          description: 上游请求唯一编号
+        plan_date:
+          type: string
+          format: date
+          description: 炉次计划业务日期
+        execution_mode:
+          type: string
+          enum: [full_replay, sliding_window]
+          default: sliding_window
+        window_minutes:
+          type: number
+          format: double
+          minimum: 0
+          default: 180
+          description: 预配窗口长度，单位为分钟
+        heats:
+          type: array
+          minItems: 1
+          description: 上游已安排的炉次计划；本服务不修改顺序和计划时间
+          items:
+            $ref: '#/components/schemas/InputHeatPlan'
+        ladles:
+          type: array
+          description: 当前钢包资源快照
+          items:
+            $ref: '#/components/schemas/InputLadleResource'
+        cranes:
+          type: array
+          description: 当前行车状态快照
+          items:
+            $ref: '#/components/schemas/InputCraneSnapshot'
+        location_map:
+          type: array
+          description: 钢包位置编码到 PLAN 坐标的映射
+          items:
+            $ref: '#/components/schemas/InputLocationMapping'
+
+    InputHeatPlan:
+      type: object
+      description: 输入模型。上游的一条炉次计划。
+      required: [heat_id, plan_sequence, required_grade, tap_finish_at]
+      additionalProperties: false
+      properties:
+        heat_id: {type: string}
+        plan_sequence: {type: integer}
+        manufacturing_order: {type: string}
+        required_grade:
+          oneOf:
+            - {type: string}
+            - {type: integer}
+        refining_route: {type: string}
+        priority: {type: number, format: double, default: 0}
+        tap_finish_at: {type: string, format: date-time}
+        ladle_arrival_at: {type: string, format: date-time}
+        ladle_pour_start_at: {type: string, format: date-time}
+        allocation_flag: {type: integer}
+
+    InputLadleResource:
+      type: object
+      description: 输入模型。当前可供调度的一只钢包。
+      required: [ladle_id, grade, position_m, weight_tonnes]
+      additionalProperties: false
+      properties:
+        ladle_id: {type: string}
+        grade:
+          oneOf:
+            - {type: string}
+            - {type: integer}
+        position_code: {type: string}
+        position_m: {type: number, format: double}
+        weight_tonnes: {type: number, format: double, minimum: 0}
+        age_seconds: {type: number, format: double, minimum: 0}
+        max_age_seconds: {type: number, format: double, minimum: 0, nullable: true}
+        availability:
+          type: string
+          enum: [available, unavailable, maintenance, unknown]
+          default: available
+
+    InputCraneSnapshot:
+      type: object
+      description: 输入模型。一台行车在某一时刻的状态快照。
+      required: [crane_id, online_status, position_m, max_load_tonnes, limit_0_m, limit_1_m]
+      additionalProperties: false
+      properties:
+        crane_id: {type: string}
+        online_status: {type: string, enum: [online, offline, maintenance, unknown]}
+        position_m: {type: number, format: double, description: PLAN 坐标刻度}
+        speed_mps: {type: number, format: double, minimum: 0, description: 米/秒}
+        current_load_tonnes: {type: number, format: double, minimum: 0, default: 0}
+        max_load_tonnes: {type: number, format: double, minimum: 0}
+        safe_distance_m: {type: number, format: double, minimum: 0, default: 10}
+        limit_0_m: {type: number, format: double}
+        limit_1_m: {type: number, format: double}
+        updated_at: {type: string, format: date-time}
+
+    InputLocationMapping:
+      type: object
+      description: 输入模型。一条钢包位置编码映射。
+      required: [position_code, position_m]
+      additionalProperties: false
+      properties:
+        position_code: {type: string}
+        span_name: {type: string}
+        position_m: {type: number, format: double, description: PLAN 坐标刻度}
+        location_type: {type: string}
+        status: {type: string}
+
+    OutputScenarioSummary:
+      type: object
+      description: 输出模型。离线场景库摘要。
+      required: [schema_version, scenario_count, categories, disturbance_groups, verified_llm_fallback_count]
+      properties:
+        schema_version: {type: integer}
+        scenario_count: {type: integer}
+        categories:
+          type: array
+          items: {$ref: '#/components/schemas/OutputCountByName'}
+        disturbance_groups:
+          type: array
+          items: {$ref: '#/components/schemas/OutputCountByName'}
+        verified_llm_fallback_count: {type: integer}
+
+    OutputCountByName:
+      type: object
+      required: [count]
+      properties:
+        category: {type: string}
+        disturbance_group: {type: string}
+        count: {type: integer}
+
+    OutputScenarioList:
+      type: object
+      required: [scenarios]
+      properties:
+        scenarios:
+          type: array
+          items: {$ref: '#/components/schemas/OutputScenarioListItem'}
+
+    OutputScenarioListItem:
+      type: object
+      description: 输出模型。场景选择器使用的摘要记录。
+      additionalProperties: false
+      properties:
+        scenario_id: {type: string}
+        category: {type: string, enum: [decision_tree_control, llm_fallback_stress]}
+        disturbance_kind: {type: string}
+        disturbance_group: {type: string}
+        title: {type: string}
+        description: {type: string}
+        visual_cue: {type: string, nullable: true}
+        evidence_type: {type: string}
+        event_time: {type: number, format: double}
+        window_start: {type: number, format: double}
+        window_end: {type: number, format: double}
+        seed: {type: integer}
+        source_plan: {type: string}
+        source_crane: {type: string}
+        source_audit: {type: string}
+        decision_tree_success: {type: boolean}
+        llm_attempted: {type: boolean}
+        llm_success: {type: boolean, nullable: true}
+        affected_heat_count: {type: integer}
+        schema_version: {type: integer}
+
+    OutputScenarioDetail:
+      type: object
+      description: 输出模型。只读场景详情和审计证据。
+      additionalProperties: true
+      required: [scenario_id, category, events, assets, responses, validations, audit]
+      properties:
+        scenario_id: {type: string}
+        category: {type: string}
+        events:
+          type: array
+          items: {$ref: '#/components/schemas/OutputScenarioEvent'}
+        assets:
+          type: array
+          items: {$ref: '#/components/schemas/OutputScenarioAsset'}
+        responses:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/OutputScenarioStageResponse'
+        validations:
+          type: object
+          additionalProperties:
+            type: array
+            items: {$ref: '#/components/schemas/OutputValidationCheck'}
+        audit: {type: object, additionalProperties: true}
+
+    OutputScenarioEvent:
+      type: object
+      required: [sequence, event_type, offset_seconds, occurred_at, payload]
+      properties:
+        sequence: {type: integer}
+        event_type: {type: string}
+        offset_seconds: {type: number, format: double}
+        occurred_at: {type: number, format: double}
+        payload: {type: object, additionalProperties: true}
+
+    OutputScenarioAsset:
+      type: object
+      required: [asset_type, asset_id, role, source_record]
+      properties:
+        asset_type: {type: string}
+        asset_id: {type: string}
+        role: {type: string}
+        source_record: {type: object, additionalProperties: true}
+
+    OutputScenarioStageResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        path: {type: string}
+        success: {type: boolean}
+        num_assigned: {type: integer}
+        elapsed_seconds: {type: number, format: double}
+        remaining_budget_seconds: {type: number, format: double, nullable: true}
+        reason: {type: string}
+        assignments:
+          type: array
+          items: {$ref: '#/components/schemas/OutputScenarioAssignment'}
+        validation_feedback: {type: object, additionalProperties: true}
+        metrics: {type: object, additionalProperties: true}
+
+    OutputScenarioAssignment:
+      type: object
+      additionalProperties: true
+      properties:
+        heat_id: {type: string}
+        ladle_id: {type: string, nullable: true}
+        crane_id: {type: string, nullable: true}
+        action: {type: string, enum: [assign, unassigned, request_human_review]}
+        reason: {type: string}
+        violations: {type: array, items: {type: string}}
+        source: {type: object, additionalProperties: true}
+
+    OutputValidationCheck:
+      type: object
+      required: [check_code, passed, details]
+      properties:
+        sequence: {type: integer}
+        check_code: {type: string}
+        passed: {type: boolean}
+        details: {type: object, additionalProperties: true}
+
+    OutputSimulationResponse:
+      type: object
+      description: 输出模型。字段不会包含 LLM 密钥、Authorization 或 prompt。
+      required: [path, success, num_assigned, num_total, elapsed_seconds, human_review_required, api_configured, scenario_id]
+      properties:
+        path: {type: string, enum: [decision_tree_success, decision_tree_failure, llm_react_success, llm_react_failure, frozen, call_human]}
+        success: {type: boolean}
+        num_assigned: {type: integer}
+        num_total: {type: integer}
+        elapsed_seconds: {type: number, format: double}
+        remaining_budget_seconds: {type: number, format: double, nullable: true}
+        reason: {type: string}
+        human_review_required: {type: boolean}
+        api_configured: {type: boolean}
+        validation_feedback: {type: object, additionalProperties: true}
+        affected_heat_ids: {type: array, items: {type: string}}
+        workflow:
+          type: object
+          nullable: true
+          properties:
+            stage: {type: string}
+            configuration_source: {type: string}
+            budget_status: {type: string}
+            failure_reasons: {type: array, items: {type: string}}
+            transitions: {type: array, items: {type: string}}
+        configuration_source: {type: string}
+        llm_attempted: {type: boolean}
+        llm_path: {type: string, nullable: true}
+        scenario_id: {type: string}
+
+    OutputPreallocationResponse:
+      type: object
+      description: 输出模型。一次正常预配包请求的完整结果。
+      required: [request_id, status, algorithm, results, metrics]
+      properties:
+        request_id: {type: string}
+        status: {type: string, enum: [completed, partial, manual_review]}
+        algorithm: {type: string, enum: [decision_tree]}
+        tree_version: {type: string}
+        execution_mode: {type: string, enum: [full_replay, sliding_window]}
+        generated_at: {type: string, format: date-time}
+        results:
+          type: array
+          items: {$ref: '#/components/schemas/OutputAllocationResult'}
+        metrics: {$ref: '#/components/schemas/OutputAllocationMetrics'}
+        audit: {$ref: '#/components/schemas/OutputAuditSummary'}
+
+    OutputAllocationResult:
+      type: object
+      required: [plan_key, heat_id, algorithm, status]
+      properties:
+        plan_key: {type: string}
+        heat_id: {type: string}
+        plan_sequence: {type: integer}
+        algorithm: {type: string, enum: [decision_tree]}
+        status: {type: string, enum: [assigned, unassigned, manual_review, excluded]}
+        ladle_id: {type: string, nullable: true}
+        crane_id: {type: string, nullable: true}
+        expected_arrival_at: {type: string, format: date-time, nullable: true}
+        expected_wait_seconds: {type: number, format: double, nullable: true}
+        grade_match: {type: boolean, nullable: true}
+        violations: {type: array, items: {type: string}}
+        reason: {type: string}
+        decision_path: {type: array, items: {type: string}}
+
+    OutputAllocationMetrics:
+      type: object
+      properties:
+        total_heats: {type: integer}
+        assigned_heats: {type: integer}
+        success_rate: {type: number, format: double, minimum: 0, maximum: 1}
+        rule_violation_count: {type: integer, minimum: 0}
+        average_wait_seconds: {type: number, format: double}
+        max_wait_seconds: {type: number, format: double}
+
+    OutputAuditSummary:
+      type: object
+      properties:
+        input_sources: {type: object, additionalProperties: {type: string}}
+        excluded_heat_count: {type: integer}
+        time_origin: {type: string, format: date-time}
+        location_mapping_count: {type: integer}
+        online_crane_count: {type: integer}
+        available_ladle_count: {type: integer}
+        lifecycle: {type: array, items: {type: object, additionalProperties: true}}
+
+    OutputErrorResponse:
+      type: object
+      description: 输出模型。错误响应不包含密钥、Authorization 或完整请求体。
+      required: [error]
+      properties:
+        error: {type: string}
+        error_type: {type: string}
+        request_id: {type: string}
+        scenario_id: {type: string}
+        details: {type: array, items: {type: string}}
+        supported_scenario_ids: {type: array, items: {type: string}}

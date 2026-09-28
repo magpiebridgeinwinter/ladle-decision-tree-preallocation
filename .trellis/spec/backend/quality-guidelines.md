@@ -6,17 +6,29 @@
 
 ## Overview
 
-<!--
-Document your project's quality standards here.
+The repository currently uses `pytest` and Python compilation checks; no formatter or linter is
+installed as a mandatory dependency. Keep changes small, typed at public boundaries, and backed
+by behavior tests. The project has a runtime package at the repository root and a historical
+`backend/` mirror; do not create a third copy of business logic.
 
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
+## Required checks
 
-(To be filled by the team)
+```bash
+.venv/bin/python -m pytest -q tests
+.venv/bin/python -m py_compile ladle_preallocation/**/*.py tools/*.py
+git diff --check
+```
+
+When an HTTP contract changes, also parse `docs/ladle-preallocation-openapi.yaml`, verify all
+five routes are listed, and test success plus each documented error class.
+
+## Review rules
+
+- Reuse existing allocation, validation, lifecycle, and response-controller functions.
+- Keep time coordinates and units explicit at layer boundaries.
+- Add a regression test for every new error branch or data contract.
+- Generated reports and SQLite artifacts must be rebuilt by their owning script, not hand-edited.
+- A normal allocation route must never instantiate an LLM client.
 
 ---
 

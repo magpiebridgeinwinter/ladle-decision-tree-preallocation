@@ -1,51 +1,31 @@
 # Logging Guidelines
 
-> How logging is done in this project.
+The service uses the Python standard-library `logging` module. `tools/serve_visualization.py`
+configures a concise `LEVEL message` format for the local server; library modules use a module
+logger and do not configure global handlers.
 
----
+## Levels
 
-## Overview
+- `INFO`: route access, server startup, and a completed high-level operation.
+- `WARNING`: recoverable fallback, stale local data, or a degraded/manual-review result.
+- `ERROR`: an operation failed and was handled by the caller.
+- `LOGGER.exception(...)`: unexpected failures where a traceback is useful for local debugging.
+- Avoid `DEBUG` output in normal scripts unless a focused diagnostic needs it.
 
-<!--
-Document your project's logging conventions here.
+## Required context
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+When available, include the route or operation, stable identifier, result status, and exception
+type. Prefer structured values in the message over dumping a full dictionary.
 
-(To be filled by the team)
+```python
+LOGGER.exception("simulation failed: %s", type(exc).__name__)
+```
 
----
+## Never log
 
-## Log Levels
+- `LLM_API_KEY`, Authorization headers, `.env.local`, prompts, raw model responses, or full request bodies;
+- source workbook rows unless the log is a deliberately redacted diagnostic;
+- credentials embedded in exception text or URLs.
 
-<!-- When to use each level: debug, info, warn, error -->
-
-(To be filled by the team)
-
----
-
-## Structured Logging
-
-<!-- Log format, required fields -->
-
-(To be filled by the team)
-
----
-
-## What to Log
-
-<!-- Important events to log -->
-
-(To be filled by the team)
-
----
-
-## What NOT to Log
-
-<!-- Sensitive data, PII, secrets -->
-
-(To be filled by the team)
+Audit data belongs in the documented response/audit model, where it must remain redacted and
+reproducible. Logs are operational context, not a second database.

@@ -5,6 +5,8 @@ from ladle_preallocation.response.controller import (
     ResponseResult,
     ThreeWayComparison,
     TieredResponseController,
+    WorkflowStage,
+    WorkflowState,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "ResponseResult",
     "ThreeWayComparison",
     "TieredResponseController",
+    "WorkflowStage",
+    "WorkflowState",
 ]
