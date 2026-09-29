@@ -368,4 +368,9 @@ def allocate_preallocation(payload: dict[str, Any]) -> tuple[int, dict[str, Any]
             "available_ladle_count": len(normalized.ladles),
         },
     }
+    # Attach stable versions in the pure allocator response. The HTTP service
+    # registers the redacted baseline in its configured repository.
+    from ladle_preallocation.production_rescheduling import versioned_allocation_response
+
+    body = versioned_allocation_response(payload, normalized, body)
     return http_status, body

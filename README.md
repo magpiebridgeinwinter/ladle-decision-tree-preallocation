@@ -33,15 +33,16 @@ source .env.local
 
 1. 在转炉开吹前 180 分钟进入预配窗口；已经吹炼的炉次锁定，不能被扰动重写。
 2. 行车不可用、钢包不可用、设施不可用或计划偏差只影响仍可重调度的局部炉次。
-3. 以 `最早开浇时刻 - 事件时刻 - 90 秒` 计算预算。预算耗尽时只执行决策树；失败后 Frozen 并要求人工复核。
-4. 扰动预算充足时直接进入 LLM Workflow；预算耗尽、LLM 未配置或方案校验失败时 Frozen + 人工复核。任何 LLM 输出都必须通过同一套钢包状态、载重、运行区间、时间窗和安全间距校验。
+3. 以 `最早开浇时刻 - 事件时刻 - 90 秒` 计算 LLM 决策预算。预算耗尽时不再等待 LLM，直接 Frozen 并要求人工复核。
+4. 扰动预算充足时直接进入 LLM Workflow。LLM 未配置、调用失败或方案校验失败时也会 Frozen + 人工复核。任何 LLM 输出都必须通过钢包状态、载重、运行区间、时间窗和安全间距校验。
 
 LLM 配置使用项目根目录的 `.env.local`。该文件采用 shell `export` 语法，必须先执行 `source .env.local`，再启动服务或 Demo；程序读取进程环境变量 `LLM_API_KEY`、`LLM_API_BASE` 和 `LLM_MODEL`。真实 `.env.local` 已被 Git 忽略，绝不写入代码、审计或报告。命令行参数 `--llm-api-key`、`--llm-api-base` 和 `--llm-model` 可以覆盖环境变量。离线测试和 `--skip-llm` Demo 不会访问外部网络。
 
 ## HTTP 接口
 
-完整接口契约见 [docs/ladle-preallocation-openapi.yaml](docs/ladle-preallocation-openapi.yaml)。当前服务
-一共提供以下 5 个 HTTP API；静态可视化页面不是业务 API：
+完整接口契约见 [docs/ladle-preallocation-openapi.yaml](docs/ladle-preallocation-openapi.yaml)。静态可视化页面不是业务 API。
+
+### 接口列表
 
 | 方法 | 路径 | 输入 | 输出 |
 | --- | --- | --- | --- |
@@ -50,19 +51,46 @@ LLM 配置使用项目根目录的 `.env.local`。该文件采用 shell `export`
 | `GET` | `/api/scenarios/{scenario_id}` | 路径中的场景编号 | 完整事件、资源、响应、校验和审计 |
 | `POST` | `/api/simulate` | 可选 `scenario_id` JSON | 受控扰动 Workflow 结果；失败时 Frozen/人工复核 |
 | `POST` | `/api/v1/ladle-preallocation/allocate` | 炉次计划、钢包、行车和位置映射 JSON | 决策树预配结果、指标和审计 |
+| `POST` | `/api/v1/ladle-preallocation/disturbances` | 扰动事件、版本和当前资源快照 | 版本化重调度任务和候选 revision |
+| `GET` | `/api/v1/ladle-preallocation/jobs/{job_id}` | 任务编号 | Workflow 状态和影响范围 |
+| `GET` | `/api/v1/ladle-preallocation/revisions/{revision_id}` | revision 编号 | 候选、确认或已发布结果 |
+| `POST` | `/api/v1/ladle-preallocation/revisions/{revision_id}/confirm` | 操作人和确认原因 | 已确认或驳回的 revision |
+| `POST` | `/api/v1/ladle-preallocation/revisions/{revision_id}/publish` | 操作人和发布原因 | 发布凭证和新配包版本 |
 
-正常预配包接口接收上游已经安排好的炉次计划和资源快照，不重新编制炉次计划：
+### 真实扰动接口怎么用
+
+真实扰动要按下面的顺序调用。每一步的编号都来自上一步响应，不能自己随意填写：
+
+```text
+1. 正常预配包：拿到 allocation_version
+2. 发生扰动：提交 disturbance_id 和三个版本号
+3. 查询任务：拿到 job_id 和 revision_id
+4. 候选可行时：人工 confirm
+5. confirm 成功后：publish
+```
+
+### 1. 启动服务
+
+项目根目录执行：
 
 ```bash
 source .env.local
 .venv/bin/python tools/serve_visualization.py --port 4173
 ```
 
+如果只测试没有 LLM 的情况，也可以直接启动。扰动接口会返回 `frozen` 或 `human_review`，不会伪造成功结果。
+
+### 2. 正常预配包，生成基线
+
+正常预配包接收上游已经安排好的炉次计划和资源快照，不重新编制炉次计划。请求中的 `plan_version` 和 `snapshot_version` 由上游系统提供；响应中的 `allocation_version` 由服务生成。
+
 ```bash
 curl -i -X POST http://127.0.0.1:4173/api/v1/ladle-preallocation/allocate \
   -H 'Content-Type: application/json' \
   -d '{
     "request_id": "demo-001",
+    "plan_version": "PLAN-20260306-V1",
+    "snapshot_version": "SNAPSHOT-20260306-080000",
     "plan_date": "2026-03-06",
     "execution_mode": "sliding_window",
     "window_minutes": 180,
@@ -105,6 +133,84 @@ curl -i -X POST http://127.0.0.1:4173/api/v1/ladle-preallocation/allocate \
 ```
 
 返回 `200` 表示所有炉次完成分配；返回 `422` 表示请求格式正确但至少一条炉次没有可行候选，响应仍包含逐炉次原因和 `manual_review`/`unassigned` 状态。请求格式的完整 OpenAPI 文件见 `docs/ladle-preallocation-openapi.yaml`。
+
+请从响应中复制这三个字段，下一步要使用：
+
+```json
+{
+  "plan_version": "PLAN-20260306-V1",
+  "snapshot_version": "SNAPSHOT-20260306-080000",
+  "allocation_version": "ALLOC-服务返回的值"
+}
+```
+
+### 3. 提交真实扰动
+
+下面示例表示 `2500` 号行车离线。把 `ALLOC-服务返回的值` 替换成上一步实际返回的 `allocation_version`：
+
+```bash
+curl -i -X POST http://127.0.0.1:4173/api/v1/ladle-preallocation/disturbances \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: DIST-20260306-0001' \
+  -d '{
+    "disturbance_id": "DIST-20260306-0001",
+    "event_type": "crane_offline",
+    "occurred_at": "2026-03-06T08:40:00+08:00",
+    "resource_id": "2500",
+    "plan_version": "PLAN-20260306-V1",
+    "allocation_version": "ALLOC-服务返回的值",
+    "snapshot_version": "SNAPSHOT-20260306-080000",
+    "locked_heat_ids": []
+  }'
+```
+
+`disturbance_id` 是这次扰动的唯一编号。相同编号重复提交时，服务会返回原来的任务，不会重复调用 LLM。
+
+响应中重点关注：
+
+| 字段 | 含义 |
+| --- | --- |
+| `job_id` | 这次扰动任务的编号 |
+| `status` | `pending_confirmation`、`frozen` 或 `human_review` 等 |
+| `revision_id` | 本次重调度结果编号 |
+| `impact_scope` | 受影响、锁定和未受影响的炉次 |
+
+### 4. 查询任务和结果
+
+把响应中的编号替换到 URL 中：
+
+```bash
+curl -i http://127.0.0.1:4173/api/v1/ladle-preallocation/jobs/JOB-服务返回的值
+curl -i http://127.0.0.1:4173/api/v1/ladle-preallocation/revisions/REV-服务返回的值
+```
+
+### 5. 人工确认并发布
+
+只有 `status=pending_confirmation` 且硬约束校验通过的候选结果可以确认：
+
+```bash
+curl -i -X POST \
+  http://127.0.0.1:4173/api/v1/ladle-preallocation/revisions/REV-服务返回的值/confirm \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "operator": "dispatcher-01",
+    "reason": "人工确认方案可执行"
+  }'
+```
+
+确认成功后才能发布：
+
+```bash
+curl -i -X POST \
+  http://127.0.0.1:4173/api/v1/ladle-preallocation/revisions/REV-服务返回的值/publish \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "operator": "dispatcher-01",
+    "reason": "确认后发布"
+  }'
+```
+
+发布前服务会再次检查版本、资源快照和校验结果。`frozen`、`human_review`、`rejected` 或未确认的 revision 不能发布。
 
 ## 结果与边界
 

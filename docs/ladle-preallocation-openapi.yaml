@@ -22,6 +22,8 @@ tags:
     description: 实时扰动响应入口
   - name: Ladle Preallocation
     description: 上游炉次计划的正常预配包
+  - name: Production Disturbance
+    description: 版本化生产扰动重调度、人工确认和结果发布
 paths:
   /api/scenarios/summary:
     get:
@@ -255,6 +257,133 @@ paths:
               schema:
                 $ref: '#/components/schemas/OutputPreallocationResponse'
 
+  /api/v1/ladle-preallocation/disturbances:
+    post:
+      tags: [Production Disturbance]
+      summary: 接收生产扰动并创建版本化重调度任务
+      operationId: createProductionDisturbance
+      description: |
+        事件必须引用正常预配产生的计划、快照和配包版本。服务先计算局部影响范围，再进入
+        LLM Workflow；LLM 候选必须经过硬约束校验。相同 disturbance_id 重试时返回原任务。
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: {type: string}
+          description: 调用方幂等键；建议与 disturbance_id 相同
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InputDisturbanceRequest'}
+            example:
+              disturbance_id: DIST-20260929-0007
+              event_type: crane_offline
+              occurred_at: '2026-09-29T08:40:00+08:00'
+              resource_id: '2500'
+              plan_version: PLAN-20260929-V3
+              allocation_version: ALLOC-20260929-0001
+              snapshot_version: SNAPSHOT-20260929-083500
+              affected_heat_ids: [AQ0640E1, AQ0641E1]
+              locked_heat_ids: []
+              current_snapshot:
+                heats: []
+                ladles: []
+                cranes: []
+                location_map: []
+      responses:
+        '200':
+          description: 已生成候选或已返回已有幂等任务
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingJob'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409':
+          description: 版本冲突、重复事件或快照冲突
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputErrorResponse'}}}
+        '422':
+          description: 无法生成可执行候选，已 Frozen 或转人工复核
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingJob'}}}
+
+  /api/v1/ladle-preallocation/jobs/{job_id}:
+    get:
+      tags: [Production Disturbance]
+      summary: 查询重调度任务
+      operationId: getReschedulingJob
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 任务状态和非敏感审计
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingJob'}}}
+        '404':
+          description: 任务不存在
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputErrorResponse'}}}
+
+  /api/v1/ladle-preallocation/revisions/{revision_id}:
+    get:
+      tags: [Production Disturbance]
+      summary: 查询重调度 revision
+      operationId: getReschedulingRevision
+      parameters:
+        - name: revision_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: 候选、确认或已发布结果
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingRevision'}}}
+        '404':
+          description: revision 不存在
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputErrorResponse'}}}
+
+  /api/v1/ladle-preallocation/revisions/{revision_id}/confirm:
+    post:
+      tags: [Production Disturbance]
+      summary: 确认或驳回候选 revision
+      operationId: confirmReschedulingRevision
+      parameters:
+        - name: revision_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InputReviewDecision'}
+            example: {operator: dispatcher-01, reason: 人工确认方案可执行}
+      responses:
+        '200':
+          description: revision 已确认
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingRevision'}}}
+        '409': {$ref: '#/components/responses/BadRequest'}
+        '423': {$ref: '#/components/responses/BadRequest'}
+
+  /api/v1/ladle-preallocation/revisions/{revision_id}/publish:
+    post:
+      tags: [Production Disturbance]
+      summary: 发布已确认 revision
+      operationId: publishReschedulingRevision
+      parameters:
+        - name: revision_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InputReviewDecision'}
+      responses:
+        '200':
+          description: revision 已发布，返回发布凭证和新的配包版本
+          content: {application/json: {schema: {$ref: '#/components/schemas/OutputReschedulingRevision'}}}
+        '409': {$ref: '#/components/responses/BadRequest'}
+        '423': {$ref: '#/components/responses/BadRequest'}
+
 components:
   parameters:
     ScenarioCategory:
@@ -420,6 +549,79 @@ components:
         position_m: {type: number, format: double, description: PLAN 坐标刻度}
         location_type: {type: string}
         status: {type: string}
+
+    InputDisturbanceRequest:
+      type: object
+      description: 生产扰动输入。必须引用正常预配的版本化基线。
+      required: [disturbance_id, event_type, occurred_at, plan_version, allocation_version, snapshot_version]
+      additionalProperties: true
+      properties:
+        disturbance_id: {type: string, minLength: 1}
+        event_type:
+          type: string
+          enum: [crane_offline, crane_speed_degraded, crane_load_restricted, crane_range_restricted, ladle_unavailable, ladle_damage, ladle_lining_alarm, ladle_over_age, facility_unavailable, argon_station_unavailable, refining_route_change, schedule_deviation, converter_delay, caster_delay, urgent_heat_inserted, priority_escalation, crane_telemetry_stale, compound_disturbance]
+        occurred_at: {type: string, format: date-time}
+        resource_id: {type: string}
+        plan_version: {type: string}
+        allocation_version: {type: string}
+        snapshot_version: {type: string}
+        affected_heat_ids: {type: array, items: {type: string}}
+        locked_heat_ids: {type: array, items: {type: string}}
+        metadata: {type: object, additionalProperties: true}
+        current_snapshot:
+          type: object
+          description: 当前炉次、钢包、行车和位置快照；省略时使用基线快照
+          additionalProperties: true
+          properties:
+            heats: {type: array, items: {$ref: '#/components/schemas/InputHeatPlan'}}
+            ladles: {type: array, items: {$ref: '#/components/schemas/InputLadleResource'}}
+            cranes: {type: array, items: {$ref: '#/components/schemas/InputCraneSnapshot'}}
+            location_map: {type: array, items: {$ref: '#/components/schemas/InputLocationMapping'}}
+
+    InputReviewDecision:
+      type: object
+      additionalProperties: false
+      properties:
+        operator: {type: string}
+        reason: {type: string}
+
+    OutputReschedulingJob:
+      type: object
+      description: 重调度任务状态，不包含密钥、认证头或完整 prompt。
+      required: [job_id, disturbance_id, status]
+      properties:
+        job_id: {type: string}
+        disturbance_id: {type: string}
+        status: {type: string, enum: [received, scoped, running, pending_confirmation, confirmed, published, frozen, human_review, rejected]}
+        revision_id: {type: string, nullable: true}
+        versions: {type: object, additionalProperties: {type: string}}
+        impact_scope: {type: object, additionalProperties: true}
+        workflow: {type: object, nullable: true, additionalProperties: true}
+        api_configured: {type: boolean}
+        revision:
+          allOf: [{$ref: '#/components/schemas/OutputReschedulingRevision'}]
+          nullable: true
+
+    OutputReschedulingRevision:
+      type: object
+      description: 重调度候选或已发布 revision。
+      required: [revision_id, job_id, parent_revision_id, status, base, results, validation]
+      properties:
+        revision_id: {type: string}
+        job_id: {type: string}
+        disturbance_id: {type: string}
+        parent_revision_id: {type: string}
+        status: {type: string, enum: [pending_confirmation, confirmed, published, rejected, frozen, human_review]}
+        algorithm: {type: string}
+        base: {type: object, additionalProperties: {type: string}}
+        impact_scope: {type: object, additionalProperties: true}
+        results: {type: array, items: {type: object, additionalProperties: true}}
+        validation: {type: object, additionalProperties: true}
+        workflow: {type: object, nullable: true, additionalProperties: true}
+        published_allocation_version: {type: string, nullable: true}
+        publish_token: {type: string, nullable: true}
+        operator: {type: string, nullable: true}
+        decision_reason: {type: string, nullable: true}
 
     OutputScenarioSummary:
       type: object
@@ -592,7 +794,7 @@ components:
     OutputPreallocationResponse:
       type: object
       description: 输出模型。一次正常预配包请求的完整结果。
-      required: [request_id, status, algorithm, results, metrics]
+      required: [request_id, status, algorithm, results, metrics, plan_version, snapshot_version, allocation_version]
       properties:
         request_id: {type: string}
         status: {type: string, enum: [completed, partial, manual_review]}
@@ -600,6 +802,10 @@ components:
         tree_version: {type: string}
         execution_mode: {type: string, enum: [full_replay, sliding_window]}
         generated_at: {type: string, format: date-time}
+        plan_version: {type: string}
+        snapshot_version: {type: string}
+        allocation_version: {type: string}
+        baseline: {type: object, additionalProperties: {type: string}}
         results:
           type: array
           items: {$ref: '#/components/schemas/OutputAllocationResult'}

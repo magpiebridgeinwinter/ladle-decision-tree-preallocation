@@ -31,7 +31,12 @@ from ladle_preallocation.llm.react_agent import ReActRescheduler
 from ladle_preallocation.llm.config import load_runtime_config
 from ladle_preallocation.offline_scenarios import ScenarioRepository
 from ladle_preallocation.offline_scenarios.validation import ScenarioValidationPolicy, ScenarioValidator
-from ladle_preallocation.preallocation_api import allocate_preallocation
+from ladle_preallocation.preallocation_api import allocate_preallocation, normalize_preallocation_request
+from ladle_preallocation.production_rescheduling import (
+    ProductionRepository,
+    ProductionReschedulingError,
+    ProductionReschedulingService,
+)
 from ladle_preallocation.real_data.audit import load_location_aware_audit
 from ladle_preallocation.response import TieredResponseController
 
@@ -40,6 +45,7 @@ from real_data_codex_stress_demo import SOURCE_AUDIT, build_scenario
 
 STATIC_ROOT = ROOT / "visualization"
 DEFAULT_SCENARIO_DB = ROOT / "outputs/offline_scenarios/ladle_scenarios.sqlite3"
+DEFAULT_PRODUCTION_DB = ROOT / "outputs/production_rescheduling.sqlite3"
 LOGGER = logging.getLogger("visualization-server")
 
 
@@ -117,6 +123,7 @@ class DemoHandler(SimpleHTTPRequestHandler):
     """Static handler plus a small JSON API."""
 
     scenario_database = DEFAULT_SCENARIO_DB
+    production_database = DEFAULT_PRODUCTION_DB
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, directory=str(STATIC_ROOT), **kwargs)
@@ -133,9 +140,30 @@ class DemoHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    @classmethod
+    def _production_service(cls) -> ProductionReschedulingService:
+        return ProductionReschedulingService(ProductionRepository(cls.production_database))
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler contract
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        if path.startswith("/api/v1/ladle-preallocation/jobs/"):
+            try:
+                job_id = path.removeprefix("/api/v1/ladle-preallocation/jobs/")
+                self._send_json(HTTPStatus.OK, DemoHandler._production_service().get_job_response(job_id))
+            except ProductionReschedulingError as exc:
+                self._send_json(exc.status, {"error": str(exc), "job_id": path.rsplit("/", 1)[-1]})
+            return
+        if path.startswith("/api/v1/ladle-preallocation/revisions/"):
+            try:
+                revision_id = path.removeprefix("/api/v1/ladle-preallocation/revisions/")
+                if revision_id.endswith("/confirm") or revision_id.endswith("/publish"):
+                    self._send_json(HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
+                    return
+                self._send_json(HTTPStatus.OK, DemoHandler._production_service().get_revision_response(revision_id))
+            except ProductionReschedulingError as exc:
+                self._send_json(exc.status, {"error": str(exc), "revision_id": path.rsplit("/", 1)[-1]})
+            return
         if not path.startswith("/api/scenarios"):
             super().do_GET()
             return
@@ -167,7 +195,9 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
         path = urlparse(self.path).path
-        if path not in {"/api/simulate", "/api/v1/ladle-preallocation/allocate"}:
+        supported = {"/api/simulate", "/api/v1/ladle-preallocation/allocate", "/api/v1/ladle-preallocation/disturbances"}
+        is_revision_action = path.startswith("/api/v1/ladle-preallocation/revisions/") and (path.endswith("/confirm") or path.endswith("/publish"))
+        if path not in supported and not is_revision_action:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
             return
         try:
@@ -182,6 +212,27 @@ class DemoHandler(SimpleHTTPRequestHandler):
             return
         if path == "/api/v1/ladle-preallocation/allocate":
             status, body = allocate_preallocation(payload)
+            if status in {200, 422} and body.get("allocation_version"):
+                try:
+                    normalized = normalize_preallocation_request(payload)
+                    body = DemoHandler._production_service().register_baseline(payload, normalized, body)
+                except (OSError, ValueError) as exc:
+                    LOGGER.warning("baseline registration failed: %s", type(exc).__name__)
+        elif path == "/api/v1/ladle-preallocation/disturbances":
+            try:
+                status, body = DemoHandler._production_service().create_disturbance(payload, self.headers.get("Idempotency-Key"))
+            except ProductionReschedulingError as exc:
+                status, body = exc.status, {"error": str(exc), "disturbance_id": payload.get("disturbance_id")}
+        elif is_revision_action:
+            try:
+                parts = path.split("/")
+                revision_id = parts[-2]
+                action = parts[-1]
+                operator = str(payload.get("operator") or self.headers.get("X-Operator") or "unknown")
+                result = DemoHandler._production_service().transition_revision(revision_id, action, operator, str(payload.get("reason") or ""))
+                status, body = HTTPStatus.OK, result
+            except ProductionReschedulingError as exc:
+                status, body = exc.status, {"error": str(exc), "revision_id": path.split("/")[-2]}
         else:
             status, body = simulate(payload)
         self._send_json(status, body)
@@ -191,9 +242,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Serve the interactive ladle allocation demo")
     parser.add_argument("--port", type=int, default=4173)
     parser.add_argument("--scenario-db", type=Path, default=DEFAULT_SCENARIO_DB)
+    parser.add_argument("--production-db", type=Path, default=DEFAULT_PRODUCTION_DB)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     DemoHandler.scenario_database = args.scenario_db
+    DemoHandler.production_database = args.production_db
     server = ThreadingHTTPServer(("127.0.0.1", args.port), DemoHandler)
     LOGGER.info("serving %s at http://127.0.0.1:%s/", STATIC_ROOT, args.port)
     try:
