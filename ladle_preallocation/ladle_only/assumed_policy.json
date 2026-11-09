@@ -1,0 +1,64 @@
+{
+  "version": "assumed-steel-policy-v2",
+  "source": "assumed",
+  "candidate_fact_defaults": {
+    "condition_code": "20A",
+    "usage_count": 2,
+    "nozzle_used_heats": 0,
+    "slide_used_heats": 0,
+    "frame_used_heats": 0,
+    "argon_ready": true
+  },
+  "assume_clean_history_when_absent": true,
+  "lining_materials": {
+    "T": {"name": "DEMO_T_LINING", "source": "assumed"}
+  },
+  "casting_minutes": {"0": 100, "1": 160, "2": 290, "3": 360, "4": 420},
+  "profiles": {
+    "1": {
+      "name": "DEMO_STEEL_GENERAL",
+      "allowed_materials": ["DEMO_STANDARD", "DEMO_HIGH", "T"],
+      "allowed_condition_bands": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "allowed_cold_steel_suffixes": ["A", "B", "C", "D", "E", "F"],
+      "allow_new_ladle": true,
+      "allowed_previous_grades": null
+    },
+    "2": {
+      "name": "DEMO_STEEL_HOT",
+      "allowed_materials": ["DEMO_HIGH", "T"],
+      "allowed_condition_bands": [0, 1, 2, 3],
+      "allowed_cold_steel_suffixes": ["A"],
+      "allow_new_ladle": false,
+      "allowed_previous_grades": null
+    }
+  },
+  "limits": {
+    "small_repair_age_heats": 34,
+    "major_repair_age_heats": 195,
+    "nozzle_used_heats": 15,
+    "slide_used_heats": 4,
+    "frame_used_heats": 100
+  },
+  "argon_operations": ["LF", "RH"],
+  "first_cast_allowed_condition_codes": ["20A", "21A", "22A", "23A"],
+  "thermal_boundaries_seconds": [3600, 5400, 7200, 9000, 10800, 14400],
+  "thermal_stop_after_seconds": 14400,
+  "material_preference": {"DEMO_STANDARD": 0, "DEMO_HIGH": 1, "T": 1},
+  "solver_defaults": {"time_limit_seconds": 10, "max_deterministic_time": 5},
+  "assumptions": [
+    "steel_profiles_and_material_codes_are_demonstration_mappings",
+    "T_is_a_demonstration_lining_material_mapping_not_a_condition_code",
+    "absent_candidate_process_facts_use_versioned_simulation_defaults_with_field_provenance",
+    "absent_previous_use_and_history_marker_may_use_an_explicit_assumed_clean_history",
+    "repair_age_limits_34_195_reference_C01_but_are_not_confirmed_enterprise_policy",
+    "nozzle_limit_15_references_Liu_LF_example_and_is_assumed_for_this_demo",
+    "slide_limit_4_references_Wei_2014_case_and_is_assumed_for_this_demo",
+    "frame_limit_100_is_a_simulation_assumption",
+    "casting_route_durations_are_estimates_not_upper_bounds",
+    "tap_finish_at_proxies_next_tapping_for_condition_time_bands",
+    "tracked_idle_time_over_4_hours_is_conservatively_stopped",
+    "bottom_cold_steel_suffix_and_material_are_retained_without_new_execution_data",
+    "temperature_is_a_snapshot_preference_only_and_is_not_predicted",
+    "missing_cast_history_thermal_clock_is_estimated_from_snapshot_condition_band_midpoint"
+  ]
+}

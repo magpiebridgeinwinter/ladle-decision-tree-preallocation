@@ -1,0 +1,98 @@
+{
+  "schedule_start_at": "2026-10-30T08:00:00+08:00",
+  "turnaround_seconds": 3600,
+  "heats": [
+    {
+      "heat_id": "H0001",
+      "grade": 1,
+      "seq": "1",
+      "route": [
+        {
+          "operation": "BOF",
+          "machine_id": "M0",
+          "sequence_on_machine": 1
+        },
+        {
+          "operation": "LF",
+          "machine_id": "M2",
+          "sequence_on_machine": "1"
+        },
+        {
+          "operation": "CC",
+          "machine_id": "M4",
+          "sequence_on_machine": 1
+        }
+      ],
+      "tap_finish_at": "2026-10-30T08:20:00+08:00",
+      "refining_route": [
+        "M2"
+      ],
+      "cast_id": "C001"
+    },
+    {
+      "heat_id": "H0002",
+      "grade": 2,
+      "seq": 2,
+      "route": [
+        {
+          "operation": "BOF",
+          "machine_id": "M1",
+          "sequence_on_machine": 1
+        },
+        {
+          "operation": "LF",
+          "machine_id": "M3",
+          "sequence_on_machine": "1"
+        },
+        {
+          "operation": "CC",
+          "machine_id": "M5",
+          "sequence_on_machine": 1
+        }
+      ],
+      "tap_finish_at": "2026-10-30T08:25:00+08:00",
+      "refining_route": [
+        "M3"
+      ],
+      "cast_id": "C002",
+      "cast_finish_at": "2026-10-30T11:05:00+08:00"
+    }
+  ],
+  "ladles": [
+    {
+      "ladle_id": "ST22",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    }
+  ],
+  "casts": [
+    {
+      "cast_id": "C001",
+      "heat_ids": [
+        "H0001"
+      ],
+      "machine_id": "M4",
+      "upstream_note": "Original casting metadata"
+    },
+    {
+      "cast_id": "C002",
+      "heat_ids": [
+        "H0002"
+      ],
+      "machine_id": "M5",
+      "upstream_note": "Original casting metadata"
+    }
+  ],
+  "machine_heat_counts": {
+    "M0": 1,
+    "M1": 1,
+    "M2": 1,
+    "M3": 1,
+    "M4": 1,
+    "M5": 1
+  },
+  "plan_version": "demo-upstream-v1"
+}

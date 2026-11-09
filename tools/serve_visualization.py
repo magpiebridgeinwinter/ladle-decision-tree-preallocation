@@ -32,6 +32,7 @@ from ladle_preallocation.llm.config import load_runtime_config
 from ladle_preallocation.offline_scenarios import ScenarioRepository
 from ladle_preallocation.offline_scenarios.validation import ScenarioValidationPolicy, ScenarioValidator
 from ladle_preallocation.preallocation_api import allocate_preallocation, normalize_preallocation_request
+from ladle_preallocation.ladle_only_api import allocate_ladles
 from ladle_preallocation.production_rescheduling import (
     ProductionRepository,
     ProductionReschedulingError,
@@ -47,6 +48,13 @@ STATIC_ROOT = ROOT / "visualization"
 DEFAULT_SCENARIO_DB = ROOT / "outputs/offline_scenarios/ladle_scenarios.sqlite3"
 DEFAULT_PRODUCTION_DB = ROOT / "outputs/production_rescheduling.sqlite3"
 LOGGER = logging.getLogger("visualization-server")
+LADLE_ONLY_ROUTE = "/api/v1/ladle-preallocation/allocate-ladles"
+MAX_LADLE_ONLY_BODY_BYTES = 2 * 1024 * 1024
+
+
+def _reject_ladle_json_constant(_value: str) -> None:
+    """Reject nonstandard JSON constants without echoing the raw token."""
+    raise ValueError("nonstandard JSON constant")
 
 
 def _runtime_config() -> dict[str, str]:
@@ -195,22 +203,29 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler contract
         path = urlparse(self.path).path
-        supported = {"/api/simulate", "/api/v1/ladle-preallocation/allocate", "/api/v1/ladle-preallocation/disturbances"}
+        supported = {"/api/simulate", "/api/v1/ladle-preallocation/allocate", "/api/v1/ladle-preallocation/disturbances", LADLE_ONLY_ROUTE}
         is_revision_action = path.startswith("/api/v1/ladle-preallocation/revisions/") and (path.endswith("/confirm") or path.endswith("/publish"))
         if path not in supported and not is_revision_action:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 64 * 1024:
+            body_limit = MAX_LADLE_ONLY_BODY_BYTES if path == LADLE_ONLY_ROUTE else 64 * 1024
+            if length <= 0 or length > body_limit:
                 raise ValueError("request body size out of range")
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            raw_body = self.rfile.read(length).decode("utf-8")
+            if path == LADLE_ONLY_ROUTE:
+                payload = json.loads(raw_body, parse_constant=_reject_ladle_json_constant)
+            else:
+                payload = json.loads(raw_body)
             if not isinstance(payload, dict):
                 raise ValueError("request body must be an object")
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"请求格式错误：{type(exc).__name__}"})
             return
-        if path == "/api/v1/ladle-preallocation/allocate":
+        if path == LADLE_ONLY_ROUTE:
+            status, body = allocate_ladles(payload)
+        elif path == "/api/v1/ladle-preallocation/allocate":
             status, body = allocate_preallocation(payload)
             if status in {200, 422} and body.get("allocation_version"):
                 try:

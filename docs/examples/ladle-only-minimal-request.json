@@ -1,0 +1,35 @@
+{
+  "schedule_start_at": "2026-10-30T08:00:00+08:00",
+  "turnaround_seconds": 3600,
+  "heats": [
+    {
+      "heat_id": "H0001",
+      "grade": 1,
+      "route": [
+        {
+          "operation": "BOF",
+          "machine_id": "M0"
+        },
+        {
+          "operation": "LF",
+          "machine_id": "M2"
+        },
+        {
+          "operation": "CC",
+          "machine_id": "M4"
+        }
+      ],
+      "tap_finish_at": "2026-10-30T08:20:00+08:00"
+    }
+  ],
+  "ladles": [
+    {
+      "ladle_id": "ST22",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    }
+  ]
+}

@@ -1,0 +1,303 @@
+{
+  "metadata": {
+    "fixture_version": "plan-public-candidate-assumptions-v2",
+    "source": "data/desktop_data/PLAN(1).xlsx",
+    "observed_fields": [
+      "ladle_id"
+    ],
+    "assumed_fields": [
+      "all candidate fields other than ladle_id"
+    ],
+    "explanation": "The 36 IDs appeared across multiple PLAN dates. This is a hypothetical available inventory, not an enterprise snapshot. Only ladle_id is observed; the other five public candidate fields are assumed. Additional process defaults are internal to the assumed policy and are not enterprise measurements."
+  },
+  "ladles": [
+    {
+      "ladle_id": "ST02",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST03",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST04",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST06",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST07",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST08",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST09",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST12",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST13",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST15",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST16",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST17",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST18",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST19",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST20",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST21",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST22",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST23",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST24",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST25",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST26",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST27",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST28",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST29",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST31",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST32",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST33",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST34",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST35",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST36",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST38",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST39",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST50",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST51",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST54",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    },
+    {
+      "ladle_id": "ST55",
+      "lining_material_code": "T",
+      "minor_repair_age_heats": 10,
+      "major_repair_age_heats": 50,
+      "availability_status": "available",
+      "available_at": "2026-10-30T08:00:00+08:00"
+    }
+  ]
+}

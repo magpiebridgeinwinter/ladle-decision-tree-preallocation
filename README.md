@@ -1,6 +1,6 @@
 # 钢包决策树预配包与局部重调度
 
-系统把上游 `PLAN` 炉次计划作为输入，结合 `CRANE` 行车快照和位置映射生成可解释的决策树预配包。正常预配包始终由决策树完成；突发扰动进入独立的 LLM Workflow，所有方案仍需经过确定性硬约束校验。
+系统把上游 `PLAN` 炉次计划作为输入，结合 `CRANE` 行车快照和位置映射生成可解释的决策树预配包。现有钢包／行车联合预配包由决策树完成；突发扰动进入独立的 LLM Workflow，所有方案仍需经过确定性硬约束校验。
 
 ## 运行入口
 
@@ -51,11 +51,27 @@ LLM 配置使用项目根目录的 `.env.local`。该文件采用 shell `export`
 | `GET` | `/api/scenarios/{scenario_id}` | 路径中的场景编号 | 完整事件、资源、响应、校验和审计 |
 | `POST` | `/api/simulate` | 可选 `scenario_id` JSON | 受控扰动 Workflow 结果；失败时 Frozen/人工复核 |
 | `POST` | `/api/v1/ladle-preallocation/allocate` | 炉次计划、钢包、行车和位置映射 JSON | 决策树预配结果、指标和审计 |
+| `POST` | `/api/v1/ladle-preallocation/allocate-ladles` | schedule_start_at、炉次 route、钢包候选集、周转时长；casts 可选 | 保留完整原 JSON，仅在原炉次补 ladle_id 或未配 allocation_reason |
 | `POST` | `/api/v1/ladle-preallocation/disturbances` | 扰动事件、版本和当前资源快照 | 版本化重调度任务和候选 revision |
 | `GET` | `/api/v1/ladle-preallocation/jobs/{job_id}` | 任务编号 | Workflow 状态和影响范围 |
 | `GET` | `/api/v1/ladle-preallocation/revisions/{revision_id}` | revision 编号 | 候选、确认或已发布结果 |
 | `POST` | `/api/v1/ladle-preallocation/revisions/{revision_id}/confirm` | 操作人和确认原因 | 已确认或驳回的 revision |
 | `POST` | `/api/v1/ladle-preallocation/revisions/{revision_id}/publish` | 操作人和发布原因 | 发布凭证和新配包版本 |
+
+### Ladle-only preallocation
+
+The additive `allocate-ladles` route uses internal steel-profile rules, a turnaround
+calendar, and CP-SAT to assign concrete ST ladles. Its public contract uses
+`schedule_start_at`, `heats[].route`, and the original six candidate field names;
+`request_id` and casting groups are optional. The response retains the complete
+original message and manages only heat-level `ladle_id` / `allocation_reason`,
+preserving metadata, time strings, JSON types, and wrappers. Internal assumptions
+and proof diagnostics do not replace that message. It calculates without crane
+scheduling, LLM calls, baseline registration, or reservation persistence. See
+[the interface guide](docs/ladle-only-preallocation.md),
+[the executable request](docs/examples/ladle-only-request.json), and
+[the minimal request](docs/examples/ladle-only-minimal-request.json). The assumed
+PLAN identity fixture is [data/ladle_only_candidates_assumed.json](data/ladle_only_candidates_assumed.json).
 
 ### 真实扰动接口怎么用
 
